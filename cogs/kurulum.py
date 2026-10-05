@@ -9,7 +9,7 @@ class Kurulum(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command()
     @commands.guild_only()
     @admin_role_only()
     async def kurulum(self, ctx):

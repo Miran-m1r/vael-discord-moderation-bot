@@ -74,7 +74,7 @@ class Backup(commands.Cog):
     # ====================================================================
     # 3. MANUEL YEDEK ALMA (Ne olur ne olmaz komutu)
     # ====================================================================
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def backup_al(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)
@@ -87,7 +87,7 @@ class Backup(commands.Cog):
     # ====================================================================
     # 4. KIYAMET PROTOKOLÜ (Nuke yiyen sunucuyu baştan inşa etme)
     # ====================================================================
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def backup_yukle(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)

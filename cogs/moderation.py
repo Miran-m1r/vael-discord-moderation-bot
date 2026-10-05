@@ -135,7 +135,7 @@ class Moderation(commands.Cog):
 
 
 
-    @commands.command()
+    @commands.hybrid_command()
     async def kredi(self, ctx):
         uid = ctx.author.id
         puan = self.trust_scores.get(uid, 100)
@@ -231,7 +231,7 @@ class Moderation(commands.Cog):
     # 6. MANUEL KOMUTLAR (Temizle, Mute, Zindan, Ban)
     # ====================================================================
 
-    @commands.command(aliases=['temizle', 'sil'])
+    @commands.hybrid_command(aliases=['temizle', 'sil'])
     @admin_role_only()
     async def purge(self, ctx, miktar: int):
         if not await require_channel(ctx, "admin_channel"): return
@@ -240,7 +240,7 @@ class Moderation(commands.Cog):
         msg = await ctx.send(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
         await msg.delete(delay=3)
 
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def mute(self, ctx, uye: discord.Member, dakika: int, *, sebep="Çok konuştu"):
         if not await require_channel(ctx, "admin_channel"): return
@@ -256,7 +256,7 @@ class Moderation(commands.Cog):
             embed.add_field(name="Süre/Sebep:", value=f"{dakika} Dk - {sebep}", inline=False)
             await log_kanali.send(embed=embed)
 
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def zindan(self, ctx, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
@@ -267,7 +267,7 @@ class Moderation(commands.Cog):
         await uye.add_roles(zindan_rolu)
         await ctx.send(f"⛓️ {uye.mention} paketlendi! Zindanda çürüyecek.")
 
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def ban(self, ctx, uye: discord.Member, *, sebep="Mekanın sahibi öyle istedi"):
         if not await require_channel(ctx, "admin_channel"): return

@@ -51,7 +51,7 @@ class SatrancDavetView(discord.ui.View):
 
         # Butonları yok et ve tahtayı çiz
         await interaction.response.edit_message(
-            content=f"⚔️ **MASA KURULDU!**\n{self.ctx.author.mention} (Beyaz) 🆚 {self.rakip.mention} (Siyah)\nOrtadaki Para: **{self.bahis * 2}** kağıt.\n\nİlk hamle Beyazın! Komut: `!hamle e4` veya `!hamle Nf3`",
+            content=f"⚔️ **MASA KURULDU!**\n{self.ctx.author.mention} (Beyaz) 🆚 {self.rakip.mention} (Siyah)\nOrtadaki Para: **{self.bahis * 2}** kağıt.\n\nİlk hamle Beyazın! Komut: `/hamle e4` veya `/hamle Nf3`",
             view=None)
         await self.cog.tahtayi_ciz(interaction.channel)
 
@@ -86,7 +86,7 @@ class Satranc(commands.Cog):
 
         embed = discord.Embed(color=discord.Color.dark_theme())
         embed.set_image(url=resim_url)
-        embed.set_footer(text=f"Sıra: {oyun['sira'].name} | Hamleni !hamle e4 şeklinde yaz")
+        embed.set_footer(text=f"Sıra: {oyun['sira'].name} | Hamleni `/hamle e4` şeklinde yaz")
 
         await kanal.send(embed=embed)
 
@@ -107,7 +107,7 @@ class Satranc(commands.Cog):
         # Oyunu bellekten sil
         del self.aktif_oyunlar[kanal.id]
 
-    @commands.command()
+    @commands.hybrid_command()
     async def satranç(self, ctx, rakip: discord.Member, bahis: int):
         """Meydan okuma komutu"""
         if not await require_channel(ctx, "game_channel"):
@@ -138,7 +138,7 @@ class Satranc(commands.Cog):
         view = SatrancDavetView(self, ctx, rakip, bahis)
         await ctx.send(content=rakip.mention, embed=embed, view=view)
 
-    @commands.command()
+    @commands.hybrid_command()
     async def hamle(self, ctx, *, hamle_adi: str):
         """Oyunu oynatan ana komut"""
         kanal_id = ctx.channel.id
@@ -182,7 +182,7 @@ class Satranc(commands.Cog):
         # Oyun bitmediyse yeni tahtayı çiz
         await self.tahtayi_ciz(ctx.channel)
 
-    @commands.command()
+    @commands.hybrid_command()
     async def pes_et(self, ctx):
         """Götü yemeyenler için kaçış butonu"""
         kanal_id = ctx.channel.id
