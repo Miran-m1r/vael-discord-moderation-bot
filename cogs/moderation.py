@@ -6,7 +6,7 @@ import time
 import os
 from dotenv import load_dotenv, find_dotenv
 from openai import AsyncOpenAI
-from utils.channels import require_channel
+from utils.channels import admin_role_only, require_channel
 
 
 load_dotenv(find_dotenv())
@@ -232,7 +232,7 @@ class Moderation(commands.Cog):
     # ====================================================================
 
     @commands.command(aliases=['temizle', 'sil'])
-    @commands.has_permissions(manage_messages=True)
+    @admin_role_only()
     async def purge(self, ctx, miktar: int):
         if not await require_channel(ctx, "admin_channel"): return
         if miktar > 100: return await ctx.send("Yavaş amk, tek seferde max 100.")
@@ -241,7 +241,7 @@ class Moderation(commands.Cog):
         await msg.delete(delay=3)
 
     @commands.command()
-    @commands.has_permissions(moderate_members=True)
+    @admin_role_only()
     async def mute(self, ctx, uye: discord.Member, dakika: int, *, sebep="Çok konuştu"):
         if not await require_channel(ctx, "admin_channel"): return
         sure = datetime.timedelta(minutes=dakika)
@@ -257,7 +257,7 @@ class Moderation(commands.Cog):
             await log_kanali.send(embed=embed)
 
     @commands.command()
-    @commands.has_permissions(manage_roles=True)
+    @admin_role_only()
     async def zindan(self, ctx, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
         zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
@@ -268,7 +268,7 @@ class Moderation(commands.Cog):
         await ctx.send(f"⛓️ {uye.mention} paketlendi! Zindanda çürüyecek.")
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @admin_role_only()
     async def ban(self, ctx, uye: discord.Member, *, sebep="Mekanın sahibi öyle istedi"):
         if not await require_channel(ctx, "admin_channel"): return
         await uye.ban(reason=sebep)

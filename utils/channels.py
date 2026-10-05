@@ -1,7 +1,40 @@
 from __future__ import annotations
 
+import os
+
 import discord
 from discord.ext import commands
+
+
+def _configured_role_id() -> int | None:
+    value = os.getenv("ADMIN_ROLE_ID", "").strip()
+    if not value:
+        return None
+    try:
+        role_id = int(value)
+    except ValueError:
+        return None
+    return role_id if role_id > 0 else None
+
+
+async def require_admin_role(ctx: commands.Context) -> bool:
+    """Allow management commands only to members with the configured role."""
+    if not ctx.guild or not isinstance(ctx.author, discord.Member):
+        return False
+
+    role_id = _configured_role_id()
+    if role_id is None:
+        await ctx.send("Yönetim komutları kapalı: `.env` içinde geçerli bir `ADMIN_ROLE_ID` tanımlayın.")
+        return False
+
+    if ctx.author.get_role(role_id) is None:
+        await ctx.send("Bu komut için gerekli yönetici rolüne sahip değilsin.")
+        return False
+    return True
+
+
+def admin_role_only():
+    return commands.check(require_admin_role)
 
 
 async def require_channel(ctx: commands.Context, setting: str) -> bool:
