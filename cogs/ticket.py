@@ -83,7 +83,8 @@ class TicketİciView(discord.ui.View):
         discord_dosya = discord.File(fp=dosya_byte, filename=f"{interaction.channel.name}-log.txt")
 
         # Şekilli Log ve AI Özeti
-        log_kanali = self.cog.bot.get_channel(self.cog.log_kanali_id)
+        settings = await self.cog.bot.db.get_settings(interaction.guild.id)
+        log_kanali = interaction.guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
         if log_kanali:
             embed = discord.Embed(title="📁 Ticket Arşivlendi", color=discord.Color.red())
             embed.add_field(name="Kapanan Kanal:", value=interaction.channel.name, inline=True)
@@ -141,13 +142,11 @@ class Ticket(commands.Cog):
         self.bot = bot
         self.ticket_sayaci = 0
 
-        self.log_kanali_id = int(os.getenv("LOG_KANALI_ID"))
         self.mod_rol_id = int(os.getenv("MOD_ROL_ID", 0))
 
 
-        self.ai_client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-        )
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -158,6 +157,9 @@ class Ticket(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def ticket_kur(self, ctx):
+        settings = await self.bot.db.get_settings(ctx.guild.id)
+        if not settings or settings.get("admin_channel") != ctx.channel.id:
+            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
             description="Bir derdin varsa aşağıdaki butona tıkla. Yapay zeka ajanımız ve yetkililerimiz sana yardımcı olacak.",

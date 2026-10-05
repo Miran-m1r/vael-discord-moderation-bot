@@ -9,11 +9,13 @@ import asyncio
 class Backup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Bot çalıştığı an gece 12 vardiyasını başlat
-        self.gece_yarisi_yedek.start()
-
     def cog_unload(self):
         self.gece_yarisi_yedek.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if not self.gece_yarisi_yedek.is_running():
+            self.gece_yarisi_yedek.start()
 
     # ====================================================================
     # 1. HER GECE 12:00'DA OTOMATİK ÇALIŞAN İŞÇİ
@@ -23,13 +25,9 @@ class Backup(commands.Cog):
 
     @tasks.loop(time=datetime.time(hour=0, minute=0, tzinfo=tz))
     async def gece_yarisi_yedek(self):
-        # NOT: Botun sadece tek bir ana sunucuda olduğunu varsayıyoruz (ID'yi buraya gir)
-        sunucu_id = 123456789012345678  # KENDİ SUNUCUNUN ID'SİNİ YAZ AMK
-        guild = self.bot.get_guild(sunucu_id)
-        if not guild: return
-
-        await self.yedek_olustur(guild)
-        print(f"[{datetime.datetime.now().strftime('%H:%M')}] Gece vardiyası tamamlandı: Sunucu yedeği alındı!")
+        for guild in self.bot.guilds:
+            await self.yedek_olustur(guild)
+        print(f"[{datetime.datetime.now().strftime('%H:%M')}] Gece vardiyası tamamlandı: Sunucu yedekleri alındı!")
 
     # ====================================================================
     # 2. YEDEK ALMA MOTORU (İskeleti Çıkartır)
@@ -78,6 +76,9 @@ class Backup(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def backup_al(self, ctx):
+        settings = await self.bot.db.get_settings(ctx.guild.id)
+        if not settings or settings.get("admin_channel") != ctx.channel.id:
+            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         mesaj = await ctx.send("⏳ Sunucunun röntgeni çekiliyor, bekle amk...")
         await self.yedek_olustur(ctx.guild)
         await mesaj.edit(content="✅ **Mekanın iskeleti kaydedildi.** `sunucu_backup.json` dosyası zımba gibi hazır.")
@@ -88,6 +89,9 @@ class Backup(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def backup_yukle(self, ctx):
+        settings = await self.bot.db.get_settings(ctx.guild.id)
+        if not settings or settings.get("admin_channel") != ctx.channel.id:
+            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         if not os.path.exists("sunucu_backup.json"):
             return await ctx.send("Lan ortada yedek dosyası yok, neyi yükleyeceğim amk?")
 
