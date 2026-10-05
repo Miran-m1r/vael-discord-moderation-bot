@@ -94,7 +94,7 @@ class Muzik(commands.Cog):
     # ====================================================================
     # 3. KULLANICI KOMUTLARI
     # ====================================================================
-    @commands.command(aliases=['p', 'çal', 'oynat'])
+    @commands.hybrid_command(aliases=['p', 'çal', 'oynat'])
     async def play(self, ctx, *, arama_sorgusu: str):
         """Şarkı aratma ve sıraya ekleme komutu"""
         if not await require_channel(ctx, "music_channel"):
@@ -126,7 +126,7 @@ class Muzik(commands.Cog):
             await self.sarki_oynat(ctx, arama_sorgusu)
             await mesaj.delete()
 
-    @commands.command(aliases=['s', 'geç', 'atla'])
+    @commands.hybrid_command(aliases=['s', 'geç', 'atla'])
     async def skip(self, ctx):
         """Çalan boku beğenmeyenler için geçme komutu"""
         if not await require_channel(ctx, "music_channel"):
@@ -138,7 +138,7 @@ class Muzik(commands.Cog):
         await ctx.send("⏭️ Parça sarmadı galiba, sıradakine geçiyorum...")
         ses_kanali.stop()  # Stop dediğimiz an otomatik olarak `after` callback'i çalışır ve sıradaki çalar.
 
-    @commands.command(aliases=['q', 'sıra', 'liste'])
+    @commands.hybrid_command(aliases=['q', 'sıra', 'liste'])
     async def queue(self, ctx):
         """Sıradaki parçaları gösterir"""
         if not await require_channel(ctx, "music_channel"):
@@ -155,7 +155,7 @@ class Muzik(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=['sg', 'ayrıl', 'dur'])
+    @commands.hybrid_command(aliases=['sg', 'ayrıl', 'dur'])
     async def leave(self, ctx):
         """Botu kovar ve kuyruğu temizler"""
         if not await require_channel(ctx, "music_channel"):

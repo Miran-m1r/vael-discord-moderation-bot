@@ -12,7 +12,7 @@ class Genel(commands.Cog):
         self.bot = bot
         self.sahip_id = int(os.getenv("OWNER_ID", 0))
 
-    @commands.command(aliases=['geri_bildirim', 'oneri', 'istek'])
+    @commands.hybrid_command(aliases=['geri_bildirim', 'oneri', 'istek'])
     async def feedback(self, ctx, *, mesaj: str):
         """Kullanıcıların şikayet, istek veya önerilerini direkt senin DM kutuna atar"""
         if not await require_channel(ctx, "chat_channel"):

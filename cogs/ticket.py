@@ -215,7 +215,7 @@ class Ticket(commands.Cog):
         self.bot.add_view(TicketİciView(self))
         print("LLM Destekli Ticket modülü fişek gibi yüklendi.")
 
-    @commands.command()
+    @commands.hybrid_command()
     @admin_role_only()
     async def ticket_kur(self, ctx):
         if not await require_channel(ctx, "admin_channel"):
@@ -224,7 +224,7 @@ class Ticket(commands.Cog):
         ticket_channel_id = settings.get("ticket_channel") if settings else None
         ticket_channel = ctx.guild.get_channel(ticket_channel_id) if ticket_channel_id else None
         if not isinstance(ticket_channel, discord.TextChannel):
-            return await ctx.send("Önce `!kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
+            return await ctx.send("Önce `/kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
             description="Bir derdin varsa aşağıdaki butona tıkla. Yapay zeka ajanımız ve yetkililerimiz sana yardımcı olacak.",
