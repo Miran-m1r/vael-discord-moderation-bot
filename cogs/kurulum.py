@@ -2,6 +2,7 @@ import asyncio
 
 import discord
 from discord.ext import commands
+from utils.channels import admin_role_only
 
 
 class Kurulum(commands.Cog):
@@ -10,12 +11,13 @@ class Kurulum(commands.Cog):
 
     @commands.command()
     @commands.guild_only()
-    @commands.has_permissions(administrator=True)
+    @admin_role_only()
     async def kurulum(self, ctx):
         questions = [
             ("log_channel", "Log Kanalı"), ("game_channel", "Kumar / Oyun Kanalı"),
             ("music_channel", "Müzik Kanalı"), ("chat_channel", "Bot Sohbet Kanalı"),
             ("admin_channel", "Bot Komut (Sadece Adminler İçin) Kanalı"),
+            ("ticket_channel", "Ticket Paneli Kanalı"),
         ]
         ids = {}
         await ctx.send("Kurulum başladı. Kanal ID'si veya kanal etiketi gönderin (60 saniye).")
