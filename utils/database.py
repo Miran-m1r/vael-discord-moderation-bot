@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ class Database:
     def __init__(self, path: str | os.PathLike[str] | None = None) -> None:
         self.path = Path(path or os.getenv("DATABASE_PATH", "data/mekanbot.sqlite3"))
         self.connection: aiosqlite.Connection | None = None
+        self._lock = asyncio.Lock()
 
     async def connect(self) -> None:
         if self.connection:
@@ -59,17 +61,18 @@ class Database:
         values = {key: channels.get(key) for key in allowed}
         if not self.connection:
             raise RuntimeError("Database is not connected")
-        await self.connection.execute(
-            """INSERT INTO sunucu_ayarlari
-            (guild_id, log_channel, game_channel, music_channel, chat_channel, admin_channel)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(guild_id) DO UPDATE SET
-            log_channel=excluded.log_channel, game_channel=excluded.game_channel,
-            music_channel=excluded.music_channel, chat_channel=excluded.chat_channel,
-            admin_channel=excluded.admin_channel""",
-            (guild_id, values["log_channel"], values["game_channel"], values["music_channel"],
-             values["chat_channel"], values["admin_channel"]))
-        await self.connection.commit()
+        async with self._lock:
+            await self.connection.execute(
+                """INSERT INTO sunucu_ayarlari
+                (guild_id, log_channel, game_channel, music_channel, chat_channel, admin_channel)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                log_channel=excluded.log_channel, game_channel=excluded.game_channel,
+                music_channel=excluded.music_channel, chat_channel=excluded.chat_channel,
+                admin_channel=excluded.admin_channel""",
+                (guild_id, values["log_channel"], values["game_channel"], values["music_channel"],
+                 values["chat_channel"], values["admin_channel"]))
+            await self.connection.commit()
 
     async def get_economy(self, user_id: int) -> dict[str, int | float]:
         if not self.connection:
@@ -81,32 +84,42 @@ class Database:
     async def add_balance(self, user_id: int, amount: int) -> int:
         if not self.connection:
             raise RuntimeError("Database is not connected")
-        await self.get_economy(user_id)
-        await self.connection.execute("UPDATE ekonomi SET bakiye=bakiye+? WHERE user_id=?", (amount, user_id))
-        await self.connection.commit()
-        return int((await self.get_economy(user_id))["bakiye"])
+        async with self._lock:
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (user_id,))
+            await self.connection.execute("UPDATE ekonomi SET bakiye=bakiye+? WHERE user_id=?", (amount, user_id))
+            await self.connection.commit()
+            row = await self._one("SELECT bakiye FROM ekonomi WHERE user_id=?", (user_id,))
+            return int(row["bakiye"])
 
     async def try_withdraw(self, user_id: int, amount: int) -> bool:
         if not self.connection:
             raise RuntimeError("Database is not connected")
-        await self.get_economy(user_id)
-        cursor = await self.connection.execute(
-            "UPDATE ekonomi SET bakiye=bakiye-? WHERE user_id=? AND bakiye>=?", (amount, user_id, amount))
-        await self.connection.commit()
-        return cursor.rowcount == 1
+        if amount <= 0:
+            return False
+        async with self._lock:
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (user_id,))
+            cursor = await self.connection.execute(
+                "UPDATE ekonomi SET bakiye=bakiye-? WHERE user_id=? AND bakiye>=?",
+                (amount, user_id, amount))
+            await self.connection.commit()
+            return cursor.rowcount == 1
 
     async def claim_salary(self, user_id: int, now: float) -> tuple[bool, int, float]:
-        data = await self.get_economy(user_id)
-        cooldown = 6 * 3600 if data["son_maas"] else 0
-        if now - float(data["son_maas"]) < cooldown:
-            return False, int(data["bakiye"]), float(data["son_maas"])
-        amount = 0 if not data["son_maas"] else 100
         if not self.connection:
             raise RuntimeError("Database is not connected")
-        await self.connection.execute(
-            "UPDATE ekonomi SET bakiye=bakiye+?, son_maas=? WHERE user_id=?", (amount, now, user_id))
-        await self.connection.commit()
-        return True, int(data["bakiye"]) + amount, now
+        async with self._lock:
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (user_id,))
+            row = await self._one("SELECT bakiye, son_maas FROM ekonomi WHERE user_id=?", (user_id,))
+            last = float(row["son_maas"])
+            cooldown = 6 * 3600 if last else 0
+            if now - last < cooldown:
+                return False, int(row["bakiye"]), last
+            amount = 500 if not last else 100
+            await self.connection.execute(
+                "UPDATE ekonomi SET bakiye=bakiye+?, son_maas=? WHERE user_id=?",
+                (amount, now, user_id))
+            await self.connection.commit()
+            return True, int(row["bakiye"]) + amount, now
 
     async def get_level(self, user_id: int) -> dict[str, int | float]:
         if not self.connection:

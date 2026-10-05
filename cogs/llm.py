@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+import asyncio
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from utils.channels import require_channel
@@ -14,8 +15,9 @@ class Sohbet(commands.Cog):
         api_key = os.getenv("OPENAI_API_KEY")
         self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None
 
-        # Kişi bazlı hafıza: {kullanici_id: [{"role": "...", "content": "..."}, ...]}
+        # Guild ve kullanıcı bazlı hafıza: {(guild_id, user_id): [...]}
         self.kisi_hafizalari = {}
+        self.hafiza_kilitleri = {}
         # Her kullanıcı için tutulacak maksimum mesaj çifti (Soru + Cevap)
         # 5 mesaj dendiği için son 5 girdiyi tutacağız
         self.maksimum_gecmis = 10  # 5 user + 5 assistant mesajı yapar
@@ -34,7 +36,7 @@ class Sohbet(commands.Cog):
         if not (bota_yanit_mi or bot_etiketlendi_mi):
             return
 
-        uid = message.author.id
+        key = (message.guild.id, message.author.id)
         icerik = message.clean_content.replace(f"@{self.bot.user.name}", "").strip()
 
         if not icerik:
@@ -42,10 +44,10 @@ class Sohbet(commands.Cog):
         if self.ai_client is None:
             return await message.reply("AI servisi yapılandırılmamış.")
 
-        # Bu kullanıcının daha önce hafızası yoksa sıfırdan kur ve kişiliğini ver
-        if uid not in self.kisi_hafizalari:
-            self.kisi_hafizalari[uid] = [
-                {
+        lock = self.hafiza_kilitleri.setdefault(key, asyncio.Lock())
+        async with lock:
+            if key not in self.kisi_hafizalari:
+                self.kisi_hafizalari[key] = [{
                     "role": "system",
                     "content": (
                         "Sen bu Discord sunucusunun belkemiği, mekanın yapay zeka assistanısın. "
@@ -53,37 +55,30 @@ class Sohbet(commands.Cog):
                         "Karşındaki insanlara 'kanka', 'aslanım', 'piç', 'amk', 'lan' falan diyebilirsin. "
                         "Kısa, net, zekice ve iğneleyici cevaplar ver. Kimseye boyun eğme, mekanın sahibi sensin."
                     )
-                }
-            ]
+                }]
 
-        # Kullanıcının mesajını o kişinin kişisel hafızasına ekle
-        self.kisi_hafizalari[uid].append({"role": "user", "content": icerik})
+            history = self.kisi_hafizalari[key]
+            history.append({"role": "user", "content": icerik})
+            history[1:] = history[1:][-self.maksimum_gecmis:]
 
-        # Hafıza sınırını kontrol et (System prompt [0. index] hariç son 10 mesajı tut)
-        # Eğer toplam uzunluk sistem mesajı + 10'u geçerse en eski mesajları uçur
-        if len(self.kisi_hafizalari[uid]) > (self.maksimum_gecmis + 1):
-            # 1. index (en eski user mesajı) ve 2. indexi (en eski assistant cevabı) sil
-            self.kisi_hafizalari[uid].pop(1)
-            self.kisi_hafizalari[uid].pop(1)
-
-        async with message.channel.typing():
-            try:
-                response = await self.ai_client.chat.completions.create(
-                    model="grok-beta",  # Veya gpt-4o-mini
-                    messages=self.kisi_hafizalari[uid],
-                    temperature=0.8
-                )
-
-                ai_cevabi = response.choices[0].message.content
-
-                # Botun cevabını da o kişinin kişisel hafızasına ekle
-                self.kisi_hafizalari[uid].append({"role": "assistant", "content": ai_cevabi})
-
-                await message.reply(ai_cevabi, mention_author=False)
-
-            except Exception as e:
-                print(f"Chatbot patladı: {e}")
-                await message.reply("Kafam yandı amk, API'de bir bokluk var az bekle sonra tekrar yaz.")
+            async with message.channel.typing():
+                try:
+                    response = await self.ai_client.chat.completions.create(
+                        model="gpt-5.4-mini",
+                        messages=history,
+                        temperature=0.8
+                    )
+                    ai_cevabi = response.choices[0].message.content
+                    if not ai_cevabi:
+                        raise RuntimeError("LLM boş yanıt döndürdü")
+                    history.append({"role": "assistant", "content": ai_cevabi})
+                    history[1:] = history[1:][-self.maksimum_gecmis:]
+                    await message.reply(ai_cevabi, mention_author=False)
+                except Exception as e:
+                    if history and history[-1]["role"] == "user" and history[-1]["content"] == icerik:
+                        history.pop()
+                    print(f"Chatbot patladı: {e}")
+                    await message.reply("Kafam yandı amk, API'de bir bokluk var az bekle sonra tekrar yaz.")
 
 
 async def setup(bot):
