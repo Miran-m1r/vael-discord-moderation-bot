@@ -4,3 +4,7 @@
 
 .idea
 .idea/
+__pycache__/
+*.py[cod]
+data/
+sunucu_backup.json

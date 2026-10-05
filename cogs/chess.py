@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import chess
 import urllib.parse
+from utils.channels import require_channel
 
 
 # ====================================================================
@@ -26,15 +27,17 @@ class SatrancDavetView(discord.ui.View):
         ekonomi = self.cog.bot.get_cog("Ekonomi")
 
         # Paraları tekrar kontrol et, belki o arada Slot'ta ezdiler amk
-        if ekonomi.bakiyeler.get(self.ctx.author.id, 0) < self.bahis or ekonomi.bakiyeler.get(self.rakip.id,
-                                                                                              0) < self.bahis:
+        if (await ekonomi.bot.db.get_economy(self.ctx.author.id))["bakiye"] < self.bahis or \
+                (await ekonomi.bot.db.get_economy(self.rakip.id))["bakiye"] < self.bahis:
             await interaction.response.edit_message(content="İkinizden birinin parası suyunu çekmiş amk, oyun iptal!",
                                                     view=None)
             return
 
         # Bahisleri kasadan düş (Kaçana iade yok)
-        ekonomi.bakiyeler[self.ctx.author.id] -= self.bahis
-        ekonomi.bakiyeler[self.rakip.id] -= self.bahis
+        if not await ekonomi.bot.db.try_withdraw(self.ctx.author.id, self.bahis) or \
+                not await ekonomi.bot.db.try_withdraw(self.rakip.id, self.bahis):
+            await interaction.response.edit_message(content="Para değiştiği için oyun iptal edildi.", view=None)
+            return
 
         # Oyunu kuruyoruz
         kanal_id = interaction.channel.id
@@ -92,12 +95,12 @@ class Satranc(commands.Cog):
         ekonomi = self.bot.get_cog("Ekonomi")
 
         if kazanan == "berabere":
-            ekonomi.bakiyeler[oyun["beyaz"].id] += oyun["bahis"]
-            ekonomi.bakiyeler[oyun["siyah"].id] += oyun["bahis"]
+            await ekonomi.bot.db.add_balance(oyun["beyaz"].id, oyun["bahis"])
+            await ekonomi.bot.db.add_balance(oyun["siyah"].id, oyun["bahis"])
             await kanal.send(f"🤝 **MAÇ BERABERE BİTTİ!** ({sebep})\nParalar iade edildi amk, ikiniz de aynısınız.")
         else:
             toplam_para = oyun["bahis"] * 2
-            ekonomi.bakiyeler[kazanan.id] += toplam_para
+            await ekonomi.bot.db.add_balance(kazanan.id, toplam_para)
             await kanal.send(
                 f"🏆 **ŞAH MAT ANASINI SATAYIM!**\n**{kazanan.mention}** rakibini maymun etti ve masadaki **{toplam_para}** kağıdı cukkaladı! ({sebep})")
 
@@ -107,6 +110,8 @@ class Satranc(commands.Cog):
     @commands.command()
     async def satranç(self, ctx, rakip: discord.Member, bahis: int):
         """Meydan okuma komutu"""
+        if not await require_channel(ctx, "game_channel"):
+            return
         if ctx.channel.id in self.aktif_oyunlar:
             return await ctx.send("Lan bu kanalda zaten dönen bir maç var, bitmesini bekle ya da başka odaya git!")
 
@@ -121,9 +126,9 @@ class Satranc(commands.Cog):
             return await ctx.send("Ulan Ekonomi modülü çökmüş, para yok oyun da yok!")
 
         # Para kontrolleri
-        if ekonomi.bakiyeler.get(ctx.author.id, 0) < bahis:
+        if (await ekonomi.bot.db.get_economy(ctx.author.id))["bakiye"] < bahis:
             return await ctx.send(f"Fakir piç, cebinde {bahis} kağıt yok, kime şekil yapıyorsun!")
-        if ekonomi.bakiyeler.get(rakip.id, 0) < bahis:
+        if (await ekonomi.bot.db.get_economy(rakip.id))["bakiye"] < bahis:
             return await ctx.send(f"Meydan okuduğun adam fakir amk, cebinde {bahis} kağıdı yok!")
 
         # Davet mesajı

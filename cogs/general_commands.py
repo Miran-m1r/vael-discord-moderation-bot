@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv, find_dotenv
+from utils.channels import require_channel
 
 load_dotenv(find_dotenv())
 
@@ -11,9 +12,11 @@ class Genel(commands.Cog):
         self.bot = bot
         self.sahip_id = int(os.getenv("OWNER_ID", 0))
 
-    @commands.command(aliases=['geri_bildirim', 'oneri', 'feedback', 'istek'])
+    @commands.command(aliases=['geri_bildirim', 'oneri', 'istek'])
     async def feedback(self, ctx, *, mesaj: str):
         """Kullanıcıların şikayet, istek veya önerilerini direkt senin DM kutuna atar"""
+        if not await require_channel(ctx, "chat_channel"):
+            return
 
         # Komutun kullanıldığı mesajı hemen silelim ki ortalıkta kirlilik olmasın
         try:

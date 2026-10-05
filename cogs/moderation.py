@@ -6,6 +6,7 @@ import time
 import os
 from dotenv import load_dotenv, find_dotenv
 from openai import AsyncOpenAI
+from utils.channels import require_channel
 
 
 load_dotenv(find_dotenv())
@@ -23,12 +24,10 @@ class Moderation(commands.Cog):
         self.supheli_kelimeler = ["lan", "mal", "aptal", "salak", "kes", "sus", "ezik", "velet", "sg", "sana ne"]
 
 
-        self.log_kanali_id = int(os.getenv("LOG_KANALI_ID"))
-        self.zindan_rol_id = int(os.getenv("ZINDAN_ROL_ID"))
+        self.zindan_rol_id = int(os.getenv("ZINDAN_ROL_ID", 0))
 
-        self.ai_client = AsyncOpenAI(
-            api_key=os.getenv("OPEN_AI_API_KEY")
-        )
+        api_key = os.getenv("OPEN_AI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None
 
 
 
@@ -36,10 +35,16 @@ class Moderation(commands.Cog):
         self.clean_messages = {}
         self.nuke_tracker = {}
 
+    async def log_channel(self, guild):
+        settings = await self.bot.db.get_settings(guild.id)
+        return guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
+
 
 
     async def ai_niyet_okuyucu(self, text):
         """AsyncOpenAI ile temiz entegrasyon"""
+        if self.ai_client is None:
+            return False
         try:
             response = await self.ai_client.chat.completions.create(
                 model="gpt-5.4-mini",
@@ -67,7 +72,8 @@ class Moderation(commands.Cog):
         self.trust_scores[uid] -= miktar
         guncel_puan = self.trust_scores[uid]
 
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        settings = await self.bot.db.get_settings(member.guild.id)
+        log_kanali = member.guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
         if log_kanali:
             embed = discord.Embed(title="📉 Sosyal Kredi Düştü!", color=discord.Color.orange())
             embed.description = f"**{member.name}** kişisinin puanı **{guncel_puan}**'a düştü.\n**Sebep:** {sebep}"
@@ -165,7 +171,7 @@ class Moderation(commands.Cog):
     async def on_message_edit(self, before, after):
         if before.author.bot or before.content == after.content: return
 
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        log_kanali = await self.log_channel(before.guild)
         if log_kanali:
             embed = discord.Embed(title="✍️ Şark Kurnazı Mesaj Düzenledi!", color=discord.Color.light_grey())
             embed.add_field(name="Kişi:", value=before.author.name, inline=False)
@@ -187,7 +193,7 @@ class Moderation(commands.Cog):
         self.nuke_tracker[uid].append(suan)
 
         if len(self.nuke_tracker[uid]) >= 3:
-            log_kanali = self.bot.get_channel(self.log_kanali_id)
+            log_kanali = await self.log_channel(guild)
             try:
                 eski_roller = [r for r in admin_user.roles if r.name != "@everyone"]
                 await admin_user.remove_roles(*eski_roller)
@@ -214,7 +220,7 @@ class Moderation(commands.Cog):
                 await self.check_nuke_attempt(entry.user, channel.guild)
                 break
 
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        log_kanali = await self.log_channel(channel.guild)
         if log_kanali:
             embed = discord.Embed(title="🗑️ Oda Silindi!", color=discord.Color.dark_red())
             embed.add_field(name="Giden Kanal:", value=channel.name, inline=True)
@@ -228,6 +234,7 @@ class Moderation(commands.Cog):
     @commands.command(aliases=['temizle', 'sil'])
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx, miktar: int):
+        if not await require_channel(ctx, "admin_channel"): return
         if miktar > 100: return await ctx.send("Yavaş amk, tek seferde max 100.")
         silinen = await ctx.channel.purge(limit=miktar + 1)
         msg = await ctx.send(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
@@ -236,11 +243,12 @@ class Moderation(commands.Cog):
     @commands.command()
     @commands.has_permissions(moderate_members=True)
     async def mute(self, ctx, uye: discord.Member, dakika: int, *, sebep="Çok konuştu"):
+        if not await require_channel(ctx, "admin_channel"): return
         sure = datetime.timedelta(minutes=dakika)
         await uye.timeout(sure, reason=sebep)
         await ctx.send(f"🔇 **{uye.name}** {dakika} dakika boyunca susturuldu. Sebep: {sebep}")
 
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        log_kanali = await self.log_channel(ctx.guild)
         if log_kanali:
             embed = discord.Embed(title="🔇 Biri Susturuldu!", color=discord.Color.dark_red())
             embed.add_field(name="Susturan Mod:", value=ctx.author.name, inline=True)
@@ -251,6 +259,7 @@ class Moderation(commands.Cog):
     @commands.command()
     @commands.has_permissions(manage_roles=True)
     async def zindan(self, ctx, uye: discord.Member):
+        if not await require_channel(ctx, "admin_channel"): return
         zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
         if not zindan_rolu: return await ctx.send("Zindan rolü bulunamadı amk.")
         eski_roller = [r for r in uye.roles if r.name != "@everyone"]
@@ -261,6 +270,7 @@ class Moderation(commands.Cog):
     @commands.command()
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx, uye: discord.Member, *, sebep="Mekanın sahibi öyle istedi"):
+        if not await require_channel(ctx, "admin_channel"): return
         await uye.ban(reason=sebep)
         await ctx.send(f"🔨 {uye.name} sunucudan siktir edildi! Sebep: {sebep}")
 
@@ -268,7 +278,7 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        log_kanali = await self.log_channel(channel.guild)
         if not log_kanali: return
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
             yapan = entry.user
@@ -280,7 +290,7 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        log_kanali = self.bot.get_channel(self.log_kanali_id)
+        log_kanali = await self.log_channel(after.guild)
         if not log_kanali: return
 
         if len(before.roles) < len(after.roles):

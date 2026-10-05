@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
+from utils.channels import require_channel
 
 # ====================================================================
 # 1. YOUTUBE VE SES MOTORU AYARLARI (İnce Ayarlar)
@@ -96,6 +97,8 @@ class Muzik(commands.Cog):
     @commands.command(aliases=['p', 'çal', 'oynat'])
     async def play(self, ctx, *, arama_sorgusu: str):
         """Şarkı aratma ve sıraya ekleme komutu"""
+        if not await require_channel(ctx, "music_channel"):
+            return
         if not ctx.author.voice:
             return await ctx.send("Lan önce bir ses kanalına gir, boşluğa mı müzik çalacağım?")
 
@@ -126,6 +129,8 @@ class Muzik(commands.Cog):
     @commands.command(aliases=['s', 'geç', 'atla'])
     async def skip(self, ctx):
         """Çalan boku beğenmeyenler için geçme komutu"""
+        if not await require_channel(ctx, "music_channel"):
+            return
         ses_kanali = ctx.voice_client
         if not ses_kanali or not ses_kanali.is_playing():
             return await ctx.send("Ortada çalan bir şey yok ki neyi geçeyim amk?")
@@ -136,6 +141,8 @@ class Muzik(commands.Cog):
     @commands.command(aliases=['q', 'sıra', 'liste'])
     async def queue(self, ctx):
         """Sıradaki parçaları gösterir"""
+        if not await require_channel(ctx, "music_channel"):
+            return
         sunucu_id = ctx.guild.id
         if sunucu_id not in self.kuyruk or not self.kuyruk[sunucu_id]:
             return await ctx.send("Kuyruk sinek avlıyor, bomboş.")
@@ -151,6 +158,8 @@ class Muzik(commands.Cog):
     @commands.command(aliases=['sg', 'ayrıl', 'dur'])
     async def leave(self, ctx):
         """Botu kovar ve kuyruğu temizler"""
+        if not await require_channel(ctx, "music_channel"):
+            return
         ses_kanali = ctx.voice_client
         if ses_kanali:
             self.kuyruk[ctx.guild.id] = []  # Kuyruğu çöpe at

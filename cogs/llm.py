@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
+from utils.channels import require_channel
 
 load_dotenv()
 
@@ -10,9 +11,8 @@ load_dotenv()
 class Sohbet(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.ai_client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-        )
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None
 
         # Kişi bazlı hafıza: {kullanici_id: [{"role": "...", "content": "..."}, ...]}
         self.kisi_hafizalari = {}
@@ -23,6 +23,9 @@ class Sohbet(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
+            return
+        settings = await self.bot.db.get_settings(message.guild.id) if message.guild else None
+        if not settings or settings.get("chat_channel") != message.channel.id:
             return
 
         bota_yanit_mi = message.reference and message.reference.resolved and message.reference.resolved.author == self.bot.user
@@ -36,6 +39,8 @@ class Sohbet(commands.Cog):
 
         if not icerik:
             return await message.reply("Eee? Ne diyorsun amk boş boş etiketleyip durma.")
+        if self.ai_client is None:
+            return await message.reply("AI servisi yapılandırılmamış.")
 
         # Bu kullanıcının daha önce hafızası yoksa sıfırdan kur ve kişiliğini ver
         if uid not in self.kisi_hafizalari:
