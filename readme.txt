@@ -17,6 +17,12 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
 
 ## 🕹️ Komut Rehberi ve Kullanım
 
+### 0. Yardım
+* **`!help`** (Alternatif: `!yardım`)
+  * *Açıklama*: Botun tüm komutlarını, kullanım şekillerini ve gerekli kanal/rol bilgilerini gösterir.
+* **`!help <komut>`**
+  * *Açıklama*: Tek bir komutun kullanımını, erişim kuralını ve kısayollarını gösterir.
+
 ### 1. Kurulum Komutları (Admin)
 * **`!kurulum`**
   * *Açıklama*: Botun çalışacağı temel kanalları (Log, Oyun, Müzik, Sohbet, Admin) sırayla sorar ve veritabanına kaydeder[cite: 3]. Sadece `Yönetici (Administrator)` yetkisi olanlar kullanabilir[cite: 3].
