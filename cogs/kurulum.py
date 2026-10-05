@@ -36,8 +36,8 @@ class Kurulum(commands.Cog):
                     channel = ctx.guild.get_channel(int(answer.content.strip()))
                 except ValueError:
                     channel = None
-            if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
-                await ctx.send("Geçerli bir kanal ID'si/etiketi değil; kurulum iptal edildi.")
+            if not isinstance(channel, discord.TextChannel):
+                await ctx.send("Bu ayar için metin kanalı ID'si/etiketi gerekli; kurulum iptal edildi.")
                 return
             ids[key] = channel.id
         await self.bot.db.save_settings(ctx.guild.id, **ids)

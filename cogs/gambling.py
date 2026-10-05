@@ -12,6 +12,8 @@ class BlackjackView(discord.ui.View):
     def __init__(self, cog, ctx, bet):
         super().__init__(timeout=60)
         self.cog, self.ctx, self.bet = cog, ctx, bet
+        self.state_lock = asyncio.Lock()
+        self.finished = False
         self.deck = list("23456789") * 4 + ["10", "J", "Q", "K", "A"] * 4
         random.shuffle(self.deck)
         self.player = [self.deck.pop(), self.deck.pop()]
@@ -41,32 +43,47 @@ class BlackjackView(discord.ui.View):
 
     @discord.ui.button(label="Kart Çek", style=discord.ButtonStyle.primary)
     async def hit(self, interaction, button):
-        self.player.append(self.deck.pop())
-        if self.score(self.player) > 21:
-            for child in self.children:
-                child.disabled = True
-            await interaction.response.edit_message(content="💥 Patladın; bahis kaybedildi.", embed=self.embed(True), view=self)
-            self.stop()
-        else:
-            await interaction.response.edit_message(embed=self.embed(), view=self)
+        async with self.state_lock:
+            if self.finished:
+                return
+            self.player.append(self.deck.pop())
+            if self.score(self.player) > 21:
+                self.finished = True
+                for child in self.children:
+                    child.disabled = True
+                await interaction.response.edit_message(content="💥 Patladın; bahis kaybedildi.", embed=self.embed(True), view=self)
+                self.stop()
+            else:
+                await interaction.response.edit_message(embed=self.embed(), view=self)
 
     @discord.ui.button(label="Bekle", style=discord.ButtonStyle.danger)
     async def stand(self, interaction, button):
-        for child in self.children:
-            child.disabled = True
-        while self.score(self.dealer) < 17:
-            self.dealer.append(self.deck.pop())
-        player, dealer = self.score(self.player), self.score(self.dealer)
-        if dealer > 21 or player > dealer:
-            await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet * 2)
-            text = f"🎉 Kazandın! Bakiye: {(await self.cog.bot.db.get_economy(self.ctx.author.id))['bakiye']}"
-        elif player == dealer:
+        async with self.state_lock:
+            if self.finished:
+                return
+            self.finished = True
+            for child in self.children:
+                child.disabled = True
+            while self.score(self.dealer) < 17:
+                self.dealer.append(self.deck.pop())
+            player, dealer = self.score(self.player), self.score(self.dealer)
+            if dealer > 21 or player > dealer:
+                await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet * 2)
+                text = f"🎉 Kazandın! Bakiye: {(await self.cog.bot.db.get_economy(self.ctx.author.id))['bakiye']}"
+            elif player == dealer:
+                await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet)
+                text = "🤝 Berabere; bahsin iade edildi."
+            else:
+                text = "💀 Kasa kazandı."
+            await interaction.response.edit_message(content=text, embed=self.embed(True), view=self)
+            self.stop()
+
+    async def on_timeout(self):
+        async with self.state_lock:
+            if self.finished:
+                return
+            self.finished = True
             await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet)
-            text = "🤝 Berabere; bahsin iade edildi."
-        else:
-            text = "💀 Kasa kazandı."
-        await interaction.response.edit_message(content=text, embed=self.embed(True), view=self)
-        self.stop()
 
 
 class Ekonomi(commands.Cog):

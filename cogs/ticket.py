@@ -67,7 +67,7 @@ class TicketİciView(discord.ui.View):
         ai_ozet = "Özet çıkarılamadı."
         try:
             response = await self.cog.ai_client.chat.completions.create(
-                model="gpt-5.4-mini",
+                model="gpt-5.4",
                 messages=[
                     {"role": "system",
                      "content": "Sen bir yönetici asistanısın. Aşağıdaki ticket konuşma geçmişini oku ve YALNIZCA 2-3 cümle ile kullanıcının sorununun ne olduğunu ve nasıl çözüldüğünü (veya çözülemediğini) özetle."},
