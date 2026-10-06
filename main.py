@@ -8,10 +8,18 @@ from dotenv import load_dotenv
 from utils.database import Database
 
 
+DEFAULT_DISCORD_PROXY = "http://127.0.0.1:8080"
+
+
 class MekanBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
-        super().__init__(command_prefix=[], intents=intents, help_command=None)
+        super().__init__(
+            command_prefix=[],
+            intents=intents,
+            help_command=None,
+            proxy=os.getenv("DISCORD_PROXY", DEFAULT_DISCORD_PROXY),
+        )
         self.db = Database()
 
     async def setup_hook(self):

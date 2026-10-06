@@ -93,11 +93,16 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
    pip install -r requirements.txt
    ```
 
-2. `.env` dosyasına bot tokenini ve yönetici rolünü ekleyin:
+2. `.env` dosyasına bot tokenini, yönetici rolünü ve yerel HTTP proxy ayarını ekleyin:
    ```env
    DISCORD_TOKEN=bot_tokeniniz
    ADMIN_ROLE_ID=yonetici_rol_id
+   DISCORD_PROXY=http://127.0.0.1:8080
    ```
+   `DISCORD_PROXY` ayarı Discord REST API ve gateway WebSocket bağlantılarında
+   `aiohttp` üzerinden kullanılır. Değeri belirtilmezse
+   `http://127.0.0.1:8080` varsayılanı kullanılır. Proxy kullanılması ağ
+   gecikmesini sıfırlamaz; ek bir proxy katmanı gecikmeyi artırabilir.
    `ADMIN_ROLE_ID` yalnızca yönetim, moderasyon, kurulum, ticket paneli ve yedekleme komutlarını
    kullanabilecek roldür. Ticket açmak için bu role gerek yoktur; herkes ticket açabilir.
    İsterseniz ticket kanallarında ayrıca `MOD_ROLE_ID=moderator_rol_id` tanımlayabilirsiniz.
