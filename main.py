@@ -6,8 +6,6 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from utils.database import Database
-from utils.discord_compat import load_extension
-
 
 DEFAULT_DISCORD_PROXY = "http://127.0.0.1:8080"
 
@@ -20,28 +18,35 @@ class MekanBot(commands.Bot):
             intents=intents,
             help_command=None,
             proxy=os.getenv("DISCORD_PROXY", DEFAULT_DISCORD_PROXY),
+            # İstersen komutların 1 saat beklemeden anında gelmesi için
+            # buraya debug_guilds=[SUNUCU_ID] parametresini ekleyebilirsin.
         )
         self.db = Database()
         self._synced = False
 
-    async def setup_hook(self):
-        await self.db.connect()
+        # Pycord setup_hook kullanmadığı için cog'ları başlatılırken direkt yüklüyoruz
         for path in sorted(Path(__file__).parent.joinpath("cogs").glob("*.py")):
             if path.name.startswith("_"):
                 continue
-            result = load_extension(self, f"cogs.{path.stem}")
-            if hasattr(result, "__await__"):
-                await result
+            try:
+                self.load_extension(f"cogs.{path.stem}")
+            except Exception as e:
+                print(f"HATA - Cog yüklenemedi: {path.stem} -> {e}")
 
     async def close(self):
         await self.db.close()
         await super().close()
 
     async def on_ready(self):
+        # Veritabanı asenkron olduğu için bot bağlanınca aktif ediyoruz
+        await self.db.connect()
         if not self._synced:
             await self.sync_commands()
             self._synced = True
+
         print(f"Logged in as {self.user} ({self.user.id})")
+        print(">>> YÜKLENEN COG'LAR:", list(self.cogs.keys()))
+        print(">>> AKTİF SLASH KOMUTLAR:", [c.name for c in getattr(self, 'application_commands', [])])
 
 
 def main():
