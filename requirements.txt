@@ -1,4 +1,4 @@
-discord.py>=2.3
+py-cord>=2.6
 aiosqlite>=0.19
 aiohttp>=3.9
 python-dotenv>=1.0

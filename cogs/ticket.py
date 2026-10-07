@@ -7,6 +7,7 @@ from dotenv import load_dotenv,find_dotenv
 from openai import AsyncOpenAI
 from utils.channels import require_channel
 from utils.discord_compat import add_cog
+from utils.privacy import external_ai_enabled, redact_sensitive_text
 
 load_dotenv(find_dotenv())
 
@@ -43,6 +44,10 @@ class TicketİciView(discord.ui.View):
         if not sohbet_gecmisi.strip():
             return await interaction.channel.send(
                 "Çözüm oluşturulabilmesi için lütfen önce talebinizi açıklayınız.")
+        if self.cog.ai_client is None or not external_ai_enabled():
+            return await interaction.channel.send(
+                "Harici yapay zekâ hizmeti etkinleştirilmemiştir; lütfen destek ekibinin yanıtını bekleyiniz."
+            )
 
         # LLM'e Prompt Çakıyoruz
         try:
@@ -51,7 +56,7 @@ class TicketİciView(discord.ui.View):
                 messages=[
                     {"role": "system",
                      "content": "Sen bu Discord sunucusunun 'Seviye 1 Teknik Destek Ajanısın'. Aşağıdaki kullanıcı mesajlarını oku ve sorunu çözmeye çalış. Samimi ama profesyonel ol. Çözemeyeceğin yetkisel bir şeyse 'Yetkili ekibimiz birazdan ilgilenecek' de. Kısa ve öz ol."},
-                    {"role": "user", "content": sohbet_gecmisi}
+                    {"role": "user", "content": redact_sensitive_text(sohbet_gecmisi)}
                 ],
                 temperature=0.5
             )
@@ -93,19 +98,20 @@ class TicketİciView(discord.ui.View):
 
         # AI'a "Bunu Özetle" Diyoruz
         ai_ozet = "Özet çıkarılamadı."
-        try:
-            response = await self.cog.ai_client.chat.completions.create(
-                model="gpt-5.4",
-                messages=[
-                    {"role": "system",
-                     "content": "Sen bir yönetici asistanısın. Aşağıdaki ticket konuşma geçmişini oku ve YALNIZCA 2-3 cümle ile kullanıcının sorununun ne olduğunu ve nasıl çözüldüğünü (veya çözülemediğini) özetle."},
-                    {"role": "user", "content": transcript}
-                ],
-                temperature=0.3
-            )
-            ai_ozet = response.choices[0].message.content
-        except:
-            pass
+        if self.cog.ai_client is not None and external_ai_enabled():
+            try:
+                response = await self.cog.ai_client.chat.completions.create(
+                    model="gpt-5.4",
+                    messages=[
+                        {"role": "system",
+                         "content": "Sen bir yönetici asistanısın. Aşağıdaki ticket konuşma geçmişini oku ve YALNIZCA 2-3 cümle ile kullanıcının sorununun ne olduğunu ve nasıl çözüldüğünü (veya çözülemediğini) özetle."},
+                        {"role": "user", "content": redact_sensitive_text(transcript)}
+                    ],
+                    temperature=0.3
+                )
+                ai_ozet = response.choices[0].message.content or ai_ozet
+            except Exception as exc:
+                print(f"Ticket AI özet hatası: {exc}")
 
         dosya_byte = io.BytesIO(transcript.encode('utf-8'))
         discord_dosya = discord.File(fp=dosya_byte, filename=f"{interaction.channel.name}-log.txt")

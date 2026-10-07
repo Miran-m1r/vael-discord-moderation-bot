@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
+from urllib.parse import urlparse
 from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
@@ -24,6 +25,20 @@ ffmpeg_ayarlari = {
 }
 
 ytdl = yt_dlp.YoutubeDL(yt_dlp_ayarlari)
+ALLOWED_MUSIC_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+
+
+def valid_music_query(query: str) -> bool:
+    query = query.strip()
+    if not query or len(query) > 200:
+        return False
+    parsed = urlparse(query)
+    if not parsed.scheme and not parsed.netloc:
+        return True
+    if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
+        return False
+    host = (parsed.hostname or "").lower().rstrip(".")
+    return host in ALLOWED_MUSIC_HOSTS
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -100,6 +115,10 @@ class Muzik(commands.Cog):
         """Şarkı aratma ve sıraya ekleme komutu"""
         if not await require_channel(ctx, "music_channel"):
             return
+        if not valid_music_query(arama_sorgusu):
+            return await ctx.send(
+                "Yalnızca YouTube bağlantıları veya arama ifadeleri kullanılabilir."
+            )
         if not ctx.author.voice:
             return await ctx.send("Lütfen önce bir ses kanalına katılınız.")
 

@@ -76,6 +76,7 @@ class ChessView(discord.ui.View):
         await self.cog.finish_game(self.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
 
     async def play_move(self, interaction: discord.Interaction, notation: str) -> None:
+        bot_turn = False
         async with self.lock:
             if self.finished:
                 await interaction.response.send_message("Bu oyun zaten sona ermiştir.", ephemeral=True)
@@ -101,8 +102,9 @@ class ChessView(discord.ui.View):
                 await self.cog.finish_game(self.channel, winner, "Oyun kurallara göre sona erdi.")
                 return
             await self.cog.update_game_message(self.channel, self)
-            if self.game.get("bot_mode") and self.game["turn"] == self.cog.bot.user:
-                await self.cog.bot_move(self)
+            bot_turn = self.game.get("bot_mode") and self.game["turn"] == self.cog.bot.user
+        if bot_turn:
+            await self.cog.bot_move(self)
 
     async def on_timeout(self) -> None:
         if not self.finished:

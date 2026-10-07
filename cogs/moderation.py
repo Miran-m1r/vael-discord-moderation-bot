@@ -86,14 +86,19 @@ class Moderation(commands.Cog):
                 eski_roller = [r for r in member.roles if r.name != "@everyone"]
                 await member.remove_roles(*eski_roller)
                 await member.add_roles(zindan_rolu)
-                await log_kanali.send(f"⛓️ **{member.name}** kullanıcısının sosyal kredi puanı kritik seviyeye düştü ve kısıtlandı.")
+                if log_kanali:
+                    await log_kanali.send(
+                        f"⛓️ **{member.name}** kullanıcısının sosyal kredi puanı kritik seviyeye düştü ve kısıtlandı."
+                    )
 
         elif guncel_puan <= 30:
             sure = datetime.timedelta(hours=2)
             try:
                 await member.timeout(sure, reason="Sosyal kredi 30'un altına düştü.")
-                await log_kanali.send(
-                    f"🔇 **{member.name}** kullanıcısı düşük sosyal kredi puanı ({guncel_puan}) nedeniyle 2 saat süreyle susturuldu.")
+                if log_kanali:
+                    await log_kanali.send(
+                        f"🔇 **{member.name}** kullanıcısı düşük sosyal kredi puanı ({guncel_puan}) nedeniyle 2 saat süreyle susturuldu."
+                    )
             except:
                 pass
 
@@ -216,8 +221,10 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
+        deleting_user = None
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
             if entry.target.id == channel.id:
+                deleting_user = entry.user
                 await self.check_nuke_attempt(entry.user, channel.guild)
                 break
 
@@ -225,7 +232,11 @@ class Moderation(commands.Cog):
         if log_kanali:
             embed = discord.Embed(title="🗑️ Oda Silindi!", color=discord.Color.dark_red())
             embed.add_field(name="Giden Kanal:", value=channel.name, inline=True)
-            embed.add_field(name="Silen Yetkili:", value=entry.user.name, inline=True)
+            embed.add_field(
+                name="Silen Yetkili:",
+                value=deleting_user.name if deleting_user else "Tespit edilemedi",
+                inline=True,
+            )
             await log_kanali.send(embed=embed)
 
     # ====================================================================
