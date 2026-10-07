@@ -78,7 +78,7 @@ async def require_channel(context: CommandContext, setting: str) -> bool:
     guild = _guild(context)
     if not guild:
         return False
-    bot = context.bot if isinstance(context, commands.Context) else context.client
+    bot = getattr(context, "bot", getattr(context, "client", None))
     settings = await bot.db.get_settings(guild.id)
     channel_id = settings.get(setting) if settings else None
     channel = guild.get_channel(channel_id) if channel_id else None
