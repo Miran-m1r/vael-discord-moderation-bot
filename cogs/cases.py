@@ -1,4 +1,4 @@
-from __future__ import annotations
+
 
 import asyncio
 import random
@@ -161,9 +161,10 @@ class Cases(commands.Cog):
         await ctx.respond(embed=discord.Embed(title="Kasa Mağazası", description=description, color=discord.Color.gold()))
 
     @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
-    async def buycase(self, ctx: discord.ApplicationContext, kasa_adi: str):
+    async def buycase(self, ctx: discord.ApplicationContext,
+                      kasa_adi: discord.Option(str, description="Satın alınacak kasanın adı")):
         try:
-            # 3 saniye kuralını ezip geçmek için Discord'a "bekle" sinyali
+            # 3 saniye sınırını ezip geçmek için defer
             await ctx.defer()
 
             if not await require_channel(ctx, "game_channel"):
@@ -219,11 +220,9 @@ class Cases(commands.Cog):
                     inline=False,
                 )
 
-            # Asıl çalışan ve asla patlamayan edit komutu budur
             await ctx.interaction.edit_original_response(embed=result)
 
         except Exception as e:
-            # Bot arka planda çökerse hatayı yutmasın, direkt chate yazsın amk!
             await ctx.channel.send(f"🚨 **KOD PATLADI AMK:** `{str(e)}`")
             print(f"Kasa açma hatası: {e}")
 
