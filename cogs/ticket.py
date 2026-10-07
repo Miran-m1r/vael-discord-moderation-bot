@@ -217,16 +217,16 @@ class Ticket(commands.Cog):
         self.bot.add_view(TicketİciView(self))
         print("LLM destekli ticket modülü başarıyla yüklendi.")
 
-    @commands.command()
+    @discord.slash_command(name="ticket_kur", description="Yapılandırılmış ticket kanalına destek paneli gönderir.")
     @commands.has_permissions(administrator=True)
-    async def ticket_kur(self, ctx):
+    async def ticket_kur(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "admin_channel"):
             return
         settings = await self.bot.db.get_settings(ctx.guild.id)
         ticket_channel_id = settings.get("ticket_channel") if settings else None
         ticket_channel = ctx.guild.get_channel(ticket_channel_id) if ticket_channel_id else None
         if not isinstance(ticket_channel, discord.TextChannel):
-            return await ctx.send("Önce `!kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
+            return await ctx.send("Önce `/kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
             description="Destek talebi oluşturmak için aşağıdaki düğmeyi kullanınız. Destek ekibimiz ve yapay zekâ asistanımız size yardımcı olacaktır.",

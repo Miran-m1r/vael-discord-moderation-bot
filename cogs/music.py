@@ -110,8 +110,8 @@ class Muzik(commands.Cog):
     # ====================================================================
     # 3. KULLANICI KOMUTLARI
     # ====================================================================
-    @commands.hybrid_command(aliases=['p', 'çal', 'oynat'])
-    async def play(self, ctx, *, arama_sorgusu: str):
+    @discord.slash_command(name="play", description="YouTube üzerinden müzik arar ve oynatır.")
+    async def play(self, ctx: discord.ApplicationContext, arama_sorgusu: str):
         """Şarkı aratma ve sıraya ekleme komutu"""
         if not await require_channel(ctx, "music_channel"):
             return
@@ -146,8 +146,8 @@ class Muzik(commands.Cog):
             await self.sarki_oynat(ctx, arama_sorgusu)
             await mesaj.delete()
 
-    @commands.hybrid_command(aliases=['s', 'geç', 'atla'])
-    async def skip(self, ctx):
+    @discord.slash_command(name="skip", description="Oynatılan parçayı atlar.")
+    async def skip(self, ctx: discord.ApplicationContext):
         """Mevcut parçayı atlama komutu."""
         if not await require_channel(ctx, "music_channel"):
             return
@@ -158,8 +158,8 @@ class Muzik(commands.Cog):
         await ctx.send("⏭️ Mevcut parça atlanıyor; sıradaki parçaya geçiliyor.")
         ses_kanali.stop()  # Stop dediğimiz an otomatik olarak `after` callback'i çalışır ve sıradaki çalar.
 
-    @commands.hybrid_command(aliases=['q', 'sıra', 'liste'])
-    async def queue(self, ctx):
+    @discord.slash_command(name="queue", description="Müzik kuyruğunu görüntüler.")
+    async def queue(self, ctx: discord.ApplicationContext):
         """Sıradaki parçaları gösterir"""
         if not await require_channel(ctx, "music_channel"):
             return
@@ -175,8 +175,8 @@ class Muzik(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(aliases=['sg', 'ayrıl', 'dur'])
-    async def leave(self, ctx):
+    @discord.slash_command(name="leave", description="Botu ses kanalından çıkarır ve kuyruğu temizler.")
+    async def leave(self, ctx: discord.ApplicationContext):
         """Botu kovar ve kuyruğu temizler"""
         if not await require_channel(ctx, "music_channel"):
             return

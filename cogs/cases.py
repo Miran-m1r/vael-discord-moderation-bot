@@ -153,15 +153,16 @@ class Cases(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.slash_command(name="cases")
-    async def cases(self, ctx: commands.Context):
+    @discord.slash_command(name="cases", description="Satın alınabilir kasaları listeler.")
+    async def cases(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
         description = "\n".join(f"**{case.name}** — `{case.price}` kredi (`{key}`)" for key, case in CASES.items())
         await ctx.send(embed=discord.Embed(title="Kasa Mağazası", description=description, color=discord.Color.gold()))
 
-    @commands.slash_command(name="buycase")
-    async def buycase(self, ctx: commands.Context, kasa_adi: str):
+    @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
+    async def buycase(self, ctx: discord.ApplicationContext, kasa_adi: str):
+        await ctx.defer()
         if not await require_channel(ctx, "game_channel"):
             return
         key = kasa_adi.casefold().replace(" ", "")
@@ -178,7 +179,7 @@ class Cases(commands.Cog):
             color=discord.Color.orange(),
         )
         opening.set_image(url=OPENING_GIF_URL)
-        message = await ctx.send(embed=opening)
+        message = await ctx.respond(embed=opening)
         await asyncio.sleep(3)
         item_name, wear, rarity, float_value, price, market_url = create_drop(case)
         image_url = await resolve_steam_image_url(market_url)
@@ -206,13 +207,11 @@ class Cases(commands.Cog):
                 value=f"[Eşya listelemesini görüntüle]({market_url})",
                 inline=False,
             )
-        await message.edit(
-            content=None,
-            embed=result,
-        )
+        # After defer(), respond() returns the follow-up WebhookMessage in Pycord.
+        await message.edit(embed=result)
 
-    @commands.slash_command(name="inventory")
-    async def inventory(self, ctx: commands.Context):
+    @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
+    async def inventory(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
         total = await self.bot.db.count_inventory(ctx.author.id)
@@ -226,8 +225,8 @@ class Cases(commands.Cog):
         embed.set_footer(text=f"Sayfa 1/{max(1, (total + 9) // 10)}")
         await ctx.send(embed=embed, view=view)
 
-    @commands.slash_command(name="sell")
-    async def sell(self, ctx: commands.Context, item_id: int):
+    @discord.slash_command(name="sell", description="Envanterinizdeki eşyayı satar.")
+    async def sell(self, ctx: discord.ApplicationContext, item_id: int):
         if not await require_channel(ctx, "game_channel"):
             return
         price = await self.bot.db.sell_inventory_item(ctx.author.id, item_id)
@@ -236,8 +235,8 @@ class Cases(commands.Cog):
             return
         await ctx.send(f"Eşya başarıyla satıldı. Hesabınıza **{price} kredi** eklendi.")
 
-    @commands.slash_command(name="trade")
-    async def trade(self, ctx: commands.Context, kullanici: discord.Member, item_id: int):
+    @discord.slash_command(name="trade", description="Başka bir kullanıcıya eşya takası teklif eder.")
+    async def trade(self, ctx: discord.ApplicationContext, kullanici: discord.Member, item_id: int):
         if not await require_channel(ctx, "game_channel"):
             return
         if kullanici == ctx.author or kullanici.bot:
