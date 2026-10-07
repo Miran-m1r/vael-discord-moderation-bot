@@ -11,6 +11,11 @@ from utils.discord_compat import add_cog
 class Backup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @staticmethod
+    def backup_path(guild_id: int) -> str:
+        os.makedirs("data/backups", exist_ok=True)
+        return os.path.join("data", "backups", f"{guild_id}.json")
     def cog_unload(self):
         self.gece_yarisi_yedek.cancel()
 
@@ -36,6 +41,8 @@ class Backup(commands.Cog):
     # ====================================================================
     async def yedek_olustur(self, guild):
         yedek = {
+            "guild_id": guild.id,
+            "guild_name": guild.name,
             "roller": [],
             "kategoriler": [],
             "kanallar": []
@@ -69,13 +76,14 @@ class Backup(commands.Cog):
                 })
 
         # Json dosyasına zımbala (Cloud mantığı, klasörde tutuyoruz)
-        with open("sunucu_backup.json", "w", encoding="utf-8") as f:
+        with open(self.backup_path(guild.id), "w", encoding="utf-8") as f:
             json.dump(yedek, f, indent=4, ensure_ascii=False)
 
     # ====================================================================
     # 3. MANUEL YEDEK ALMA (Ne olur ne olmaz komutu)
     # ====================================================================
     @commands.hybrid_command()
+    @commands.has_permissions(administrator=True)
     @admin_role_only()
     async def backup_al(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)
@@ -83,22 +91,25 @@ class Backup(commands.Cog):
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         mesaj = await ctx.send("⏳ Sunucu yedeği oluşturuluyor. Lütfen bekleyiniz...")
         await self.yedek_olustur(ctx.guild)
-        await mesaj.edit(content="✅ **Sunucu yedeği oluşturuldu.** `sunucu_backup.json` dosyası hazır.")
+        await mesaj.edit(content="✅ **Sunucu yedeği oluşturuldu.** Sunucuya özel yedek dosyası hazır.")
 
     # ====================================================================
     # 4. KIYAMET PROTOKOLÜ (Nuke yiyen sunucuyu baştan inşa etme)
     # ====================================================================
     @commands.hybrid_command()
+    @commands.has_permissions(administrator=True)
     @admin_role_only()
     async def backup_yukle(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
-        if not os.path.exists("sunucu_backup.json"):
+        backup_path = self.backup_path(ctx.guild.id)
+        if not os.path.exists(backup_path):
             return await ctx.send("Yüklenecek bir yedek dosyası bulunamadı.")
 
         onay_mesaji = await ctx.send(
-            "⚠️ **UYARI!** Bu işlem mevcut kanalları ve rolleri silerek yedekteki yapıyı geri yükleyecektir. "
+            f"⚠️ **UYARI!** Bu işlem {ctx.guild.name} sunucusundaki mevcut kanalları ve rolleri silerek "
+            "sunucuya ait yedekteki yapıyı geri yükleyecektir. "
             "Devam etmek için `Evet` yazınız.")
 
         def check(m):
@@ -112,8 +123,13 @@ class Backup(commands.Cog):
         await ctx.send("☢️ **Geri yükleme işlemi başlatıldı. Mevcut sunucu yapısı yeniden oluşturulacaktır.** ☢️")
 
         # Dosyayı oku
-        with open("sunucu_backup.json", "r", encoding="utf-8") as f:
-            yedek = json.load(f)
+        try:
+            with open(backup_path, "r", encoding="utf-8") as f:
+                yedek = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return await ctx.send("Yedek dosyası okunamadı; geri yükleme işlemi başlatılmadı.")
+        if yedek.get("guild_id") != ctx.guild.id:
+            return await ctx.send("Yedek dosyası bu sunucuya ait değildir; işlem iptal edildi.")
 
         # 1. YIKIM AŞAMASI (Her şeyi sil)
         for kanal in ctx.guild.channels:

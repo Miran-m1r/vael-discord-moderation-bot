@@ -1,6 +1,6 @@
 # MekanBot
 
-discord.py/Pycord cog mimarisi kullanan, SQLite tabanlı ekonomi, moderasyon, müzik, destek, satranç ve kasa sistemi içeren Discord botu.
+Pycord cog mimarisi kullanan, SQLite tabanlı ekonomi, moderasyon, müzik, destek, satranç ve kasa sistemi içeren Discord botu.
 
 ## Kurulum
 
@@ -15,6 +15,7 @@ discord.py/Pycord cog mimarisi kullanan, SQLite tabanlı ekonomi, moderasyon, m�
    ```env
    DISCORD_TOKEN=...
    OPENAI_API_KEY=...
+   ALLOW_EXTERNAL_AI=false
    DATABASE_PATH=data/mekanbot.sqlite3
    ```
 
@@ -25,6 +26,8 @@ discord.py/Pycord cog mimarisi kullanan, SQLite tabanlı ekonomi, moderasyon, m�
    ```
 
 İlk çalıştırmada veritabanı tabloları otomatik oluşturulur. Yönetici, kanal kısıtlamalarını tanımlamak için `!kurulum` komutunu kullanmalıdır.
+
+`ALLOW_EXTERNAL_AI=true` açıkça ayarlanmadıkça sohbet ve ticket içerikleri harici yapay zekâ hizmetlerine gönderilmez. Etkinleştirildiğinde gönderilen içeriklerde bilinen token, parola ve yetkilendirme bilgileri redakte edilir.
 
 ## Komutlar
 
