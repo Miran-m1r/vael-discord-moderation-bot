@@ -2,16 +2,16 @@ import asyncio
 
 import discord
 from discord.ext import commands
-from utils.channels import admin_role_only
+from utils.discord_compat import add_cog
 
 
 class Kurulum(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command()
+    @commands.command()
     @commands.guild_only()
-    @admin_role_only()
+    @commands.has_permissions(administrator=True)
     async def kurulum(self, ctx):
         questions = [
             ("log_channel", "Log Kanalı"), ("game_channel", "Kumar / Oyun Kanalı"),
@@ -20,7 +20,7 @@ class Kurulum(commands.Cog):
             ("ticket_channel", "Ticket Paneli Kanalı"),
         ]
         ids = {}
-        await ctx.send("Kurulum başladı. Kanal ID'si veya kanal etiketi gönderin (60 saniye).")
+        await ctx.send("Kurulum başlatıldı. Lütfen her soru için kanal ID'sini veya kanal etiketini 60 saniye içinde gönderiniz.")
         for key, label in questions:
             await ctx.send(f"**{label}:**")
 
@@ -30,7 +30,7 @@ class Kurulum(commands.Cog):
             try:
                 answer = await self.bot.wait_for("message", timeout=60, check=check)
             except asyncio.TimeoutError:
-                await ctx.send("Kurulum zaman aşımına uğradı; değişiklik kaydedilmedi.")
+                await ctx.send("Kurulum zaman aşımına uğradı; herhangi bir değişiklik kaydedilmedi.")
                 return
             channel = answer.channel_mentions[0] if answer.channel_mentions else None
             if channel is None:
@@ -43,8 +43,8 @@ class Kurulum(commands.Cog):
                 return
             ids[key] = channel.id
         await self.bot.db.save_settings(ctx.guild.id, **ids)
-        await ctx.send("✅ Kurulum tamamlandı; kanal ayarları veritabanına kaydedildi.")
+        await ctx.send("✅ Kurulum tamamlandı. Kanal ayarları veritabanına kaydedildi.")
 
 
-async def setup(bot):
-    await bot.add_cog(Kurulum(bot))
+def setup(bot):
+    return add_cog(bot, Kurulum(bot))

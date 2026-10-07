@@ -3,8 +3,12 @@ from __future__ import annotations
 import os
 
 import discord
-from discord import app_commands
 from discord.ext import commands
+
+try:
+    from discord import app_commands
+except ImportError:
+    app_commands = None
 
 
 CommandContext = commands.Context | discord.Interaction
@@ -62,7 +66,9 @@ async def require_admin_role(context: CommandContext) -> bool:
 def admin_role_only():
     def decorator(command):
         command = commands.check(require_admin_role)(command)
-        return app_commands.check(require_admin_role)(command)
+        if app_commands is not None:
+            command = app_commands.check(require_admin_role)(command)
+        return command
 
     return decorator
 

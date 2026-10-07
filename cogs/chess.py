@@ -1,201 +1,247 @@
+from __future__ import annotations
+
+import random
+from typing import Any
+
+import chess
 import discord
 from discord.ext import commands
-import chess
-import urllib.parse
+
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 
-# ====================================================================
-# 1. MEYDAN OKUMA BUTONLARI (Kabul Et / Siktiri Çek)
-# ====================================================================
-class SatrancDavetView(discord.ui.View):
-    def __init__(self, cog, ctx, rakip, bahis):
-        super().__init__(timeout=60.0)
+PIECES = {
+    "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
+    "p": "♟", "n": "♞", "b": "♝", "r": "♜", "q": "♛", "k": "♚",
+}
+
+
+def render_board(board: chess.Board) -> str:
+    rows = []
+    for rank in range(7, -1, -1):
+        cells = []
+        for file in range(8):
+            piece = board.piece_at(chess.square(file, rank))
+            cells.append(PIECES[piece.symbol()] if piece else ("▫️" if (file + rank) % 2 else "▪️"))
+        rows.append(f"{rank + 1} " + " ".join(cells))
+    return "```\n" + "\n".join(rows) + "\n  a b c d e f g h\n```"
+
+
+class MoveModal(discord.ui.Modal):
+    def __init__(self, view: "ChessView"):
+        super().__init__(title="Hamle Girişi")
+        self.view = view
+        self.move = discord.ui.InputText(
+            label="Hamle",
+            placeholder="Örneğin: e4, Nf3 veya e2e4",
+            min_length=2,
+            max_length=10,
+        )
+        self.add_item(self.move)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.view.play_move(interaction, str(self.move.value))
+
+
+class ChessView(discord.ui.View):
+    def __init__(self, cog: "Satranc", channel: discord.abc.Messageable, game: dict[str, Any]):
+        super().__init__(timeout=1800)
         self.cog = cog
-        self.ctx = ctx
-        self.rakip = rakip
-        self.bahis = bahis
+        self.channel = channel
+        self.game = game
+        self.lock = __import__("asyncio").Lock()
+        self.finished = False
 
-    async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.user != self.rakip:
-            await interaction.response.send_message("Lan sana mı meydan okudu yarram, basma şu butona!", ephemeral=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user not in self.game["players"]:
+            await interaction.response.send_message(
+                "Bu satranç oyunu yalnızca oyunun oyuncuları tarafından kullanılabilir.",
+                ephemeral=True,
+            )
+            return False
+        if interaction.user != self.game["turn"]:
+            await interaction.response.send_message("Şu anda hamle sırası sizde değildir.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Kabul Et (Paranı Ezerim)", style=discord.ButtonStyle.success)
-    async def kabul_et(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ekonomi = self.cog.bot.get_cog("Ekonomi")
+    @discord.ui.button(label="Hamle Yap", style=discord.ButtonStyle.primary, emoji="♟️")
+    async def move_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(MoveModal(self))
 
-        # Paraları tekrar kontrol et, belki o arada Slot'ta ezdiler amk
-        if (await ekonomi.bot.db.get_economy(self.ctx.author.id))["bakiye"] < self.bahis or \
-                (await ekonomi.bot.db.get_economy(self.rakip.id))["bakiye"] < self.bahis:
-            await interaction.response.edit_message(content="İkinizden birinin parası suyunu çekmiş amk, oyun iptal!",
-                                                    view=None)
+    @discord.ui.button(label="Oyundan Ayrıl", style=discord.ButtonStyle.danger, emoji="🏳️")
+    async def resign_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        winner = next(player for player in self.game["players"] if player != interaction.user)
+        await interaction.response.defer()
+        await self.cog.finish_game(self.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
+
+    async def play_move(self, interaction: discord.Interaction, notation: str) -> None:
+        async with self.lock:
+            if self.finished:
+                await interaction.response.send_message("Bu oyun zaten sona ermiştir.", ephemeral=True)
+                return
+            board: chess.Board = self.game["board"]
+            try:
+                move = chess.Move.from_uci(notation.strip())
+                if move not in board.legal_moves:
+                    move = board.parse_san(notation.strip())
+            except (ValueError, chess.InvalidMoveError):
+                await interaction.response.send_message(
+                    "Geçersiz bir hamle girdiniz. SAN veya UCI formatında yasal bir hamle belirtiniz.",
+                    ephemeral=True,
+                )
+                return
+            board.push(move)
+            self.game["turn"] = self.game["players"][1] if self.game["turn"] == self.game["players"][0] else self.game["players"][0]
+            await interaction.response.defer()
+            if board.is_game_over():
+                winner = None if board.outcome().winner is None else (
+                    self.game["players"][0] if board.outcome().winner == chess.WHITE else self.game["players"][1]
+                )
+                await self.cog.finish_game(self.channel, winner, "Oyun kurallara göre sona erdi.")
+                return
+            await self.cog.update_game_message(self.channel, self)
+            if self.game.get("bot_mode") and self.game["turn"] == self.cog.bot.user:
+                await self.cog.bot_move(self)
+
+    async def on_timeout(self) -> None:
+        if not self.finished:
+            await self.cog.finish_game(self.channel, None, "Oyun zaman aşımı nedeniyle sona erdi.")
+
+
+class ChessInviteView(discord.ui.View):
+    def __init__(self, cog: "Satranc", ctx: commands.Context, opponent: discord.Member, bet: int):
+        super().__init__(timeout=120)
+        self.cog, self.ctx, self.opponent, self.bet = cog, ctx, opponent, bet
+        self.resolved = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user != self.opponent:
+            await interaction.response.send_message(
+                "Bu davet yalnızca davet edilen kullanıcı tarafından yanıtlanabilir.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.resolved:
             return
-
-        # Bahisleri kasadan düş (Kaçana iade yok)
-        if not await ekonomi.bot.db.try_withdraw(self.ctx.author.id, self.bahis) or \
-                not await ekonomi.bot.db.try_withdraw(self.rakip.id, self.bahis):
-            await interaction.response.edit_message(content="Para değiştiği için oyun iptal edildi.", view=None)
+        self.resolved = True
+        if self.cog.active_games.get(interaction.channel.id):
+            await interaction.response.edit_message(content="Bu kanalda zaten devam eden bir oyun bulunmaktadır.", view=None)
             return
-
-        # Oyunu kuruyoruz
-        kanal_id = interaction.channel.id
-        self.cog.aktif_oyunlar[kanal_id] = {
-            "tahta": chess.Board(),
-            "beyaz": self.ctx.author,
-            "siyah": self.rakip,
-            "bahis": self.bahis,
-            "sira": self.ctx.author  # İlk beyaz başlar
+        if self.bet and (
+            not await self.cog.bot.db.try_withdraw_pair(self.ctx.author.id, self.opponent.id, self.bet)
+        ):
+            await interaction.response.edit_message(content="Oyunculardan birinin bakiyesi bahis için yeterli değildir.", view=None)
+            return
+        game = {
+            "board": chess.Board(),
+            "players": [self.ctx.author, self.opponent],
+            "turn": self.ctx.author,
+            "bet": self.bet,
+            "bot_mode": False,
         }
+        self.cog.active_games[interaction.channel.id] = game
+        await interaction.response.edit_message(content="Satranç oyunu başlatıldı.", view=None)
+        await self.cog.update_game_message(interaction.channel, ChessView(self.cog, interaction.channel, game))
 
-        # Butonları yok et ve tahtayı çiz
-        await interaction.response.edit_message(
-            content=f"⚔️ **MASA KURULDU!**\n{self.ctx.author.mention} (Beyaz) 🆚 {self.rakip.mention} (Siyah)\nOrtadaki Para: **{self.bahis * 2}** kağıt.\n\nİlk hamle Beyazın! Komut: `/hamle e4` veya `/hamle Nf3`",
-            view=None)
-        await self.cog.tahtayi_ciz(interaction.channel)
-
-    @discord.ui.button(label="Siktir Et (Tırstım)", style=discord.ButtonStyle.danger)
-    async def reddet(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(
-            content=f"{self.rakip.mention} tırstı ve masadan kaçtı. Para cebinizde kaldı.", view=None)
+    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.resolved = True
+        await interaction.response.edit_message(content="Satranç daveti reddedildi.", view=None)
         self.stop()
 
 
-# ====================================================================
-# 2. ANA SATRANÇ MODÜLÜ
-# ====================================================================
 class Satranc(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Hangi kanalda hangi oyun dönüyor? {kanal_id: {oyun_verileri}}
-        # Mantık: Aynı kanalda aynı anda sadece 1 maç oynanabilir. Çorba olmasın.
-        self.aktif_oyunlar = {}
+        self.active_games: dict[int, dict[str, Any]] = {}
 
-    async def tahtayi_ciz(self, kanal):
-        """Chess.com'un dinamik API'sini kullanarak tahtayı jilet gibi renderlar"""
-        oyun = self.aktif_oyunlar.get(kanal.id)
-        if not oyun: return
+    async def update_game_message(self, channel, view: ChessView) -> None:
+        game = view.game
+        description = render_board(game["board"])
+        description += f"\nSıra: {game['turn'].mention if hasattr(game['turn'], 'mention') else 'Bot'}"
+        await channel.send(embed=discord.Embed(title="Satranç Oyunu", description=description), view=view)
 
-        tahta = oyun["tahta"]
-        # FEN kodunu internete uyumlu hale getiriyoruz (boşlukları %20 yapar falan)
-        fen_kodu = urllib.parse.quote(tahta.fen())
+    async def bot_move(self, view: ChessView) -> None:
+        async with view.lock:
+            if view.finished:
+                return
+            board: chess.Board = view.game["board"]
+            legal_moves = list(board.legal_moves)
+            if not legal_moves:
+                return
+            board.push(random.choice(legal_moves))
+            view.game["turn"] = view.game["players"][0]
+            await self.update_game_message(view.channel, view)
 
-        # Jilet gibi Chess.com API'si (Siyahın sırasıysa tahtayı çevirme parametresi de eklenebilir ama standart iyidir)
-        resim_url = f"https://www.chess.com/dynboard?fen={fen_kodu}&board=green&piece=neo&size=3"
-
-        embed = discord.Embed(color=discord.Color.dark_theme())
-        embed.set_image(url=resim_url)
-        embed.set_footer(text=f"Sıra: {oyun['sira'].name} | Hamleni `/hamle e4` şeklinde yaz")
-
-        await kanal.send(embed=embed)
-
-    async def oyun_bitir(self, kanal, kazanan, sebep):
-        oyun = self.aktif_oyunlar.get(kanal.id)
-        ekonomi = self.bot.get_cog("Ekonomi")
-
-        if kazanan == "berabere":
-            await ekonomi.bot.db.add_balance(oyun["beyaz"].id, oyun["bahis"])
-            await ekonomi.bot.db.add_balance(oyun["siyah"].id, oyun["bahis"])
-            await kanal.send(f"🤝 **MAÇ BERABERE BİTTİ!** ({sebep})\nParalar iade edildi amk, ikiniz de aynısınız.")
+    async def finish_game(self, channel, winner, reason: str) -> None:
+        game = self.active_games.pop(channel.id, None)
+        if not game:
+            return
+        if winner is None and game["bet"]:
+            await self.bot.db.add_balance(game["players"][0].id, game["bet"])
+            if not game["bot_mode"]:
+                await self.bot.db.add_balance(game["players"][1].id, game["bet"])
+            result = "Oyun berabere tamamlandı; bahisler iade edildi."
+        elif winner is None:
+            result = "Oyun berabere tamamlandı."
+        elif game["bet"]:
+            await self.bot.db.add_balance(winner.id, game["bet"] * 2)
+            result = f"{winner.mention} oyunu kazandı. Toplam ödül: {game['bet'] * 2} kredi."
         else:
-            toplam_para = oyun["bahis"] * 2
-            await ekonomi.bot.db.add_balance(kazanan.id, toplam_para)
-            await kanal.send(
-                f"🏆 **ŞAH MAT ANASINI SATAYIM!**\n**{kazanan.mention}** rakibini maymun etti ve masadaki **{toplam_para}** kağıdı cukkaladı! ({sebep})")
+            result = f"{winner.mention} oyunu kazandı."
+        await channel.send(f"**Satranç sonucu:** {result}\n**Açıklama:** {reason}")
 
-        # Oyunu bellekten sil
-        del self.aktif_oyunlar[kanal.id]
-
-    @commands.hybrid_command()
-    async def satranç(self, ctx, rakip: discord.Member, bahis: int):
-        """Meydan okuma komutu"""
+    @commands.slash_command(name="chess")
+    async def chess(self, ctx: commands.Context, rakip: discord.Member | None = None, bahis: int = 0):
         if not await require_channel(ctx, "game_channel"):
             return
-        if ctx.channel.id in self.aktif_oyunlar:
-            return await ctx.send("Lan bu kanalda zaten dönen bir maç var, bitmesini bekle ya da başka odaya git!")
-
+        if ctx.channel.id in self.active_games:
+            await ctx.send("Bu kanalda hâlihazırda devam eden bir satranç oyunu bulunmaktadır.")
+            return
+        if bahis < 0:
+            await ctx.send("Bahis tutarı sıfır veya daha büyük olmalıdır.")
+            return
+        if rakip is None:
+            if bahis and not await self.bot.db.try_withdraw(ctx.author.id, bahis):
+                await ctx.send("Bakiyeniz belirtilen bahis için yeterli değildir.")
+                return
+            game = {
+                "board": chess.Board(), "players": [ctx.author, self.bot.user],
+                "turn": ctx.author, "bet": bahis, "bot_mode": True,
+            }
+            self.active_games[ctx.channel.id] = game
+            await ctx.send("Bota karşı satranç oyunu başlatıldı.")
+            await self.update_game_message(ctx.channel, ChessView(self, ctx.channel, game))
+            return
         if rakip == ctx.author or rakip.bot:
-            return await ctx.send("Kendi kendine veya botla parasına mı oynayacaksın yıkık piç?")
-
-        if bahis <= 0:
-            return await ctx.send("Beleşe oyun yok, ortaya para koy!")
-
-        ekonomi = self.bot.get_cog("Ekonomi")
-        if not ekonomi:
-            return await ctx.send("Ulan Ekonomi modülü çökmüş, para yok oyun da yok!")
-
-        # Para kontrolleri
-        if (await ekonomi.bot.db.get_economy(ctx.author.id))["bakiye"] < bahis:
-            return await ctx.send(f"Fakir piç, cebinde {bahis} kağıt yok, kime şekil yapıyorsun!")
-        if (await ekonomi.bot.db.get_economy(rakip.id))["bakiye"] < bahis:
-            return await ctx.send(f"Meydan okuduğun adam fakir amk, cebinde {bahis} kağıdı yok!")
-
-        # Davet mesajı
-        embed = discord.Embed(title="♟️ BİRİ SANA RACON KESTİ!",
-                              description=f"{ctx.author.mention}, {rakip.mention} kişisine **{bahis}** kağıdına satranç meydan okuması yolladı!",
-                              color=discord.Color.red())
-        view = SatrancDavetView(self, ctx, rakip, bahis)
-        await ctx.send(content=rakip.mention, embed=embed, view=view)
-
-    @commands.hybrid_command()
-    async def hamle(self, ctx, *, hamle_adi: str):
-        """Oyunu oynatan ana komut"""
-        kanal_id = ctx.channel.id
-        oyun = self.aktif_oyunlar.get(kanal_id)
-
-        if not oyun:
-            return await ctx.send("Bu kanalda oynanan bir maç yok amk, hayaletlerle mi oynuyorsun?")
-
-        if ctx.author != oyun["sira"]:
-            return await ctx.send("Lan bekle, sıra sende değil!")
-
-        tahta = oyun["tahta"]
-
-        # Adamın hamlesini deniyoruz
-        try:
-            # push_san, "e4", "Nf3", "O-O" gibi normal insan dilini anlar
-            tahta.push_san(hamle_adi)
-        except ValueError:
-            return await ctx.send(
-                f"Lan yarram '{hamle_adi}' diye hamle mi var? Ya yanlış yazdın ya da kural dışı (Şah altındasın belki). Düzgün oyna!")
-
-        # Sırayı diğerine geçir
-        oyun["sira"] = oyun["siyah"] if ctx.author == oyun["beyaz"] else oyun["beyaz"]
-
-        # Mat veya Beraberlik kontrolü
-        if tahta.is_checkmate():
-            await self.tahtayi_ciz(ctx.channel)
-            await self.oyun_bitir(ctx.channel, kazanan=ctx.author, sebep="Mat ettin.")
+            await ctx.send("Geçerli bir rakip kullanıcı belirtiniz.")
             return
-
-        if tahta.is_stalemate():
-            await self.tahtayi_ciz(ctx.channel)
-            await self.oyun_bitir(ctx.channel, kazanan="berabere", sebep="Pat (Hamle kalmadı)")
+        if bahis and (await self.bot.db.get_economy(ctx.author.id))["bakiye"] < bahis:
+            await ctx.send("Bakiyeniz belirtilen bahis için yeterli değildir.")
             return
+        embed = discord.Embed(
+            title="Satranç Daveti",
+            description=f"{ctx.author.mention}, {rakip.mention} kullanıcısını {bahis} kredi bahisli bir oyuna davet etti.",
+        )
+        await ctx.send(content=rakip.mention, embed=embed, view=ChessInviteView(self, ctx, rakip, bahis))
 
-        if tahta.is_insufficient_material():
-            await self.tahtayi_ciz(ctx.channel)
-            await self.oyun_bitir(ctx.channel, kazanan="berabere", sebep="İkinizin de taşı bitti amk.")
+    @commands.slash_command(name="pes")
+    async def resign(self, ctx: commands.Context):
+        game = self.active_games.get(ctx.channel.id)
+        if not game:
+            await ctx.send("Bu kanalda devam eden bir satranç oyunu bulunmamaktadır.")
             return
-
-        # Oyun bitmediyse yeni tahtayı çiz
-        await self.tahtayi_ciz(ctx.channel)
-
-    @commands.hybrid_command()
-    async def pes_et(self, ctx):
-        """Götü yemeyenler için kaçış butonu"""
-        kanal_id = ctx.channel.id
-        oyun = self.aktif_oyunlar.get(kanal_id)
-
-        if not oyun: return
-
-        if ctx.author not in [oyun["beyaz"], oyun["siyah"]]:
-            return await ctx.send("Lan sen oynamıyorsun ki neye pes ediyorsun yancı!")
-
-        kazanan = oyun["siyah"] if ctx.author == oyun["beyaz"] else oyun["beyaz"]
-        await self.oyun_bitir(ctx.channel, kazanan=kazanan, sebep="Rakip ağlayarak masadan kaçtı.")
+        if ctx.author not in game["players"]:
+            await ctx.send("Bu oyunun oyuncusu değilsiniz.")
+            return
+        winner = next(player for player in game["players"] if player != ctx.author)
+        await self.finish_game(ctx.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
 
 
-async def setup(bot):
-    await bot.add_cog(Satranc(bot))
+def setup(bot):
+    return add_cog(bot, Satranc(bot))

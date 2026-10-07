@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 
 class Seviye(commands.Cog):
@@ -24,7 +25,7 @@ class Seviye(commands.Cog):
         data = await self.bot.db.add_xp(message.author.id, random.randint(15, 25), time.time())
         if int(data["level"]) > int(before["level"]):
             await message.channel.send(
-                f"🎉 {message.author.mention} **Seviye {data['level']}** oldu!")
+                f"🎉 {message.author.mention} **Seviye {data['level']}** seviyesine ulaştınız!")
             role_id = self.odul_rolleri.get(int(data["level"]))
             role = message.guild.get_role(role_id) if role_id else None
             if role:
@@ -46,5 +47,5 @@ class Seviye(commands.Cog):
         await ctx.send(embed=embed)
 
 
-async def setup(bot):
-    await bot.add_cog(Seviye(bot))
+def setup(bot):
+    return add_cog(bot, Seviye(bot))

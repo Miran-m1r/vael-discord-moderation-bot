@@ -5,6 +5,7 @@ import json
 import os
 import datetime
 import asyncio
+from utils.discord_compat import add_cog
 
 
 class Backup(commands.Cog):
@@ -80,9 +81,9 @@ class Backup(commands.Cog):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
-        mesaj = await ctx.send("⏳ Sunucunun röntgeni çekiliyor, bekle amk...")
+        mesaj = await ctx.send("⏳ Sunucu yedeği oluşturuluyor. Lütfen bekleyiniz...")
         await self.yedek_olustur(ctx.guild)
-        await mesaj.edit(content="✅ **Mekanın iskeleti kaydedildi.** `sunucu_backup.json` dosyası zımba gibi hazır.")
+        await mesaj.edit(content="✅ **Sunucu yedeği oluşturuldu.** `sunucu_backup.json` dosyası hazır.")
 
     # ====================================================================
     # 4. KIYAMET PROTOKOLÜ (Nuke yiyen sunucuyu baştan inşa etme)
@@ -94,10 +95,11 @@ class Backup(commands.Cog):
         if not settings or settings.get("admin_channel") != ctx.channel.id:
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         if not os.path.exists("sunucu_backup.json"):
-            return await ctx.send("Lan ortada yedek dosyası yok, neyi yükleyeceğim amk?")
+            return await ctx.send("Yüklenecek bir yedek dosyası bulunamadı.")
 
         onay_mesaji = await ctx.send(
-            "⚠️ **UYARI!** Bu komut mevcut TÜM kanalları ve rolleri SİLİP dünkü yedeği kuracak. Emin misin lan? (Evet yaz)")
+            "⚠️ **UYARI!** Bu işlem mevcut kanalları ve rolleri silerek yedekteki yapıyı geri yükleyecektir. "
+            "Devam etmek için `Evet` yazınız.")
 
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == "evet"
@@ -105,9 +107,9 @@ class Backup(commands.Cog):
         try:
             await self.bot.wait_for('message', timeout=15.0, check=check)
         except asyncio.TimeoutError:
-            return await ctx.send("Zamanında cevap vermedin, iptal ettim. Altıma sıçtım korkudan de geç.")
+            return await ctx.send("Onay süresi doldu. Geri yükleme işlemi iptal edildi.")
 
-        await ctx.send("☢️ **KIYAMET PROTOKOLÜ BAŞLADI! MEVCUT HER ŞEY YIKILIYOR!** ☢️")
+        await ctx.send("☢️ **Geri yükleme işlemi başlatıldı. Mevcut sunucu yapısı yeniden oluşturulacaktır.** ☢️")
 
         # Dosyayı oku
         with open("sunucu_backup.json", "r", encoding="utf-8") as f:
@@ -161,5 +163,5 @@ class Backup(commands.Cog):
         await acil_kanal.send("✅ **OPERASYON TAMAM!** Sunucu dünkü haline getirildi. Mekan senin, patron!")
 
 
-async def setup(bot):
-    await bot.add_cog(Backup(bot))
+def setup(bot):
+    return add_cog(bot, Backup(bot))
