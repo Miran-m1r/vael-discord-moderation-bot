@@ -159,7 +159,7 @@ class Moderation(commands.Cog):
         embed.add_field(name="Mevcut Puanın:", value=f"**{puan} / 100**", inline=False)
         embed.add_field(name="Durum Özeti:", value=durum, inline=False)
         embed.set_footer(text="Düzgün muhabbet ettikçe puanın yavaş yavaş yükselir.")
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
     # ====================================================================
     # 4. HAYALET ETİKET (Ghost-Ping) & DÜZENLEME AVCISI
@@ -247,9 +247,9 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx: discord.ApplicationContext, miktar: int):
         if not await require_channel(ctx, "admin_channel"): return
-        if miktar > 100: return await ctx.send("Tek işlemde en fazla 100 mesaj silebilirsiniz.")
+        if miktar > 100: return await ctx.respond("Tek işlemde en fazla 100 mesaj silebilirsiniz.")
         silinen = await ctx.channel.purge(limit=miktar + 1)
-        msg = await ctx.send(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
+        msg = await ctx.respond(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
         await msg.delete(delay=3)
 
     @discord.slash_command(name="mute", description="Bir üyeyi belirtilen süreyle susturur.")
@@ -258,7 +258,7 @@ class Moderation(commands.Cog):
         if not await require_channel(ctx, "admin_channel"): return
         sure = datetime.timedelta(minutes=dakika)
         await uye.timeout(sure, reason=sebep)
-        await ctx.send(f"🔇 **{uye.name}** {dakika} dakika boyunca susturuldu. Sebep: {sebep}")
+        await ctx.respond(f"🔇 **{uye.name}** {dakika} dakika boyunca susturuldu. Sebep: {sebep}")
 
         log_kanali = await self.log_channel(ctx.guild)
         if log_kanali:
@@ -273,18 +273,18 @@ class Moderation(commands.Cog):
     async def zindan(self, ctx: discord.ApplicationContext, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
         zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
-        if not zindan_rolu: return await ctx.send("Kısıtlama rolü bulunamadı.")
+        if not zindan_rolu: return await ctx.respond("Kısıtlama rolü bulunamadı.")
         eski_roller = [r for r in uye.roles if r.name != "@everyone"]
         await uye.remove_roles(*eski_roller)
         await uye.add_roles(zindan_rolu)
-        await ctx.send(f"⛓️ {uye.mention} kullanıcısına kısıtlama rolü tanımlandı.")
+        await ctx.respond(f"⛓️ {uye.mention} kullanıcısına kısıtlama rolü tanımlandı.")
 
     @discord.slash_command(name="ban", description="Bir üyeyi sunucudan uzaklaştırır.")
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx: discord.ApplicationContext, uye: discord.Member, sebep: str = "Yönetim kararı"):
         if not await require_channel(ctx, "admin_channel"): return
         await uye.ban(reason=sebep)
-        await ctx.send(f"🔨 **{uye.name}** sunucudan uzaklaştırıldı. Sebep: {sebep}")
+        await ctx.respond(f"🔨 **{uye.name}** sunucudan uzaklaştırıldı. Sebep: {sebep}")
 
 
 

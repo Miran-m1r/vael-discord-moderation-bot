@@ -158,7 +158,7 @@ class Cases(commands.Cog):
         if not await require_channel(ctx, "game_channel"):
             return
         description = "\n".join(f"**{case.name}** — `{case.price}` kredi (`{key}`)" for key, case in CASES.items())
-        await ctx.send(embed=discord.Embed(title="Kasa Mağazası", description=description, color=discord.Color.gold()))
+        await ctx.respond(embed=discord.Embed(title="Kasa Mağazası", description=description, color=discord.Color.gold()))
 
     @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
     async def buycase(self, ctx: discord.ApplicationContext, kasa_adi: str):
@@ -168,10 +168,10 @@ class Cases(commands.Cog):
         key = kasa_adi.casefold().replace(" ", "")
         case = CASES.get(key)
         if case is None:
-            await ctx.send("Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
+            await ctx.respond("Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, case.price):
-            await ctx.send("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
+            await ctx.respond("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
             return
         opening = discord.Embed(
             title="🎁 Kasa Açılıyor...",
@@ -179,7 +179,7 @@ class Cases(commands.Cog):
             color=discord.Color.orange(),
         )
         opening.set_image(url=OPENING_GIF_URL)
-        message = await ctx.respond(embed=opening)
+        msg = await ctx.respond(embed=opening)
         await asyncio.sleep(3)
         item_name, wear, rarity, float_value, price, market_url = create_drop(case)
         image_url = await resolve_steam_image_url(market_url)
@@ -207,8 +207,8 @@ class Cases(commands.Cog):
                 value=f"[Eşya listelemesini görüntüle]({market_url})",
                 inline=False,
             )
-        # After defer(), respond() returns the follow-up WebhookMessage in Pycord.
-        await message.edit(embed=result)
+        # Pycord updates the deferred interaction through the application context.
+        await ctx.edit(embed=result)
 
     @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
     async def inventory(self, ctx: discord.ApplicationContext):
@@ -223,7 +223,7 @@ class Cases(commands.Cog):
         ) or "Envanterinizde eşya bulunmamaktadır."
         embed = discord.Embed(title="Envanter", description=description, color=discord.Color.blurple())
         embed.set_footer(text=f"Sayfa 1/{max(1, (total + 9) // 10)}")
-        await ctx.send(embed=embed, view=view)
+        await ctx.respond(embed=embed, view=view)
 
     @discord.slash_command(name="sell", description="Envanterinizdeki eşyayı satar.")
     async def sell(self, ctx: discord.ApplicationContext, item_id: int):
@@ -231,25 +231,25 @@ class Cases(commands.Cog):
             return
         price = await self.bot.db.sell_inventory_item(ctx.author.id, item_id)
         if price is None:
-            await ctx.send("Belirtilen eşya size ait değil veya mevcut değil.")
+            await ctx.respond("Belirtilen eşya size ait değil veya mevcut değil.")
             return
-        await ctx.send(f"Eşya başarıyla satıldı. Hesabınıza **{price} kredi** eklendi.")
+        await ctx.respond(f"Eşya başarıyla satıldı. Hesabınıza **{price} kredi** eklendi.")
 
     @discord.slash_command(name="trade", description="Başka bir kullanıcıya eşya takası teklif eder.")
     async def trade(self, ctx: discord.ApplicationContext, kullanici: discord.Member, item_id: int):
         if not await require_channel(ctx, "game_channel"):
             return
         if kullanici == ctx.author or kullanici.bot:
-            await ctx.send("Geçerli bir kullanıcı belirtiniz.")
+            await ctx.respond("Geçerli bir kullanıcı belirtiniz.")
             return
         if not await self.bot.db.owns_inventory_item(ctx.author.id, item_id):
-            await ctx.send("Belirtilen eşya size ait değil veya mevcut değil.")
+            await ctx.respond("Belirtilen eşya size ait değil veya mevcut değil.")
             return
         embed = discord.Embed(
             title="Takas Teklifi",
             description=f"{ctx.author.mention}, **#{item_id}** numaralı eşyayı {kullanici.mention} kullanıcısına göndermek istiyor.",
         )
-        await ctx.send(content=kullanici.mention, embed=embed, view=TradeView(self, ctx.author, kullanici, item_id))
+        await ctx.respond(content=kullanici.mention, embed=embed, view=TradeView(self, ctx.author, kullanici, item_id))
 
 
 def setup(bot):

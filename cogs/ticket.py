@@ -226,14 +226,14 @@ class Ticket(commands.Cog):
         ticket_channel_id = settings.get("ticket_channel") if settings else None
         ticket_channel = ctx.guild.get_channel(ticket_channel_id) if ticket_channel_id else None
         if not isinstance(ticket_channel, discord.TextChannel):
-            return await ctx.send("Önce `/kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
+            return await ctx.respond("Önce `/kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
             description="Destek talebi oluşturmak için aşağıdaki düğmeyi kullanınız. Destek ekibimiz ve yapay zekâ asistanımız size yardımcı olacaktır.",
             color=discord.Color.blurple()
         )
         await ticket_channel.send(embed=embed, view=TicketAcView(self))
-        await ctx.send(f"✅ Ticket paneli {ticket_channel.mention} kanalına gönderildi.")
+        await ctx.respond(f"✅ Ticket paneli {ticket_channel.mention} kanalına gönderildi.")
 
 
 def setup(bot):

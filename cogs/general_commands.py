@@ -23,7 +23,7 @@ class Genel(commands.Cog):
         # Sahibin ID'sini bulup DM nesnesini oluşturalım
         sahip = await self.bot.fetch_user(self.sahip_id)
         if not sahip:
-            return await ctx.send("Sistem yöneticisi tanımlanamadığı için geri bildiriminiz iletilemedi.")
+            return await ctx.respond("Sistem yöneticisi tanımlanamadığı için geri bildiriminiz iletilemedi.")
 
         # Sana gelecek şekilli şüküllü Embed raporu
         embed = discord.Embed(
@@ -41,12 +41,12 @@ class Genel(commands.Cog):
             await sahip.send(embed=embed)
 
             # Adama kanaldan geçici olarak onay verelim (3 saniye sonra uçuyor)
-            gecici_mesaj = await ctx.send(
+            gecici_mesaj = await ctx.respond(
                 f"✅ {ctx.author.mention}, geri bildiriminiz sistem yöneticisine başarıyla iletildi. Teşekkür ederiz.")
             await gecici_mesaj.delete(delay=3)
 
         except Exception as e:
-            await ctx.send("Geri bildirim iletilirken bir hata oluştu.")
+            await ctx.respond("Geri bildirim iletilirken bir hata oluştu.")
 
 
 def setup(bot):

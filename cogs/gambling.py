@@ -101,36 +101,36 @@ class Ekonomi(commands.Cog):
         ok, balance, last = await self.bot.db.claim_salary(ctx.author.id, time.time())
         if not ok:
             remaining = max(0, int(6 * 3600 - (time.time() - last)))
-            return await ctx.send(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
-        await ctx.send(f"Maaş ödemesi hesabınıza yatırıldı. Güncel bakiyeniz: **{balance} kredi**.")
+            return await ctx.respond(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
+        await ctx.respond(f"Maaş ödemesi hesabınıza yatırıldı. Güncel bakiyeniz: **{balance} kredi**.")
 
     @discord.slash_command(name="bakiye", description="Güncel kredi bakiyenizi görüntüler.")
     async def bakiye(self, ctx: discord.ApplicationContext):
         if await require_channel(ctx, "game_channel"):
-            await ctx.send(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
+            await ctx.respond(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
 
     @discord.slash_command(name="blackjack", description="Belirlediğiniz kredi bahsiyle blackjack oynar.")
     async def blackjack(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
-            return await ctx.send("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
+            return await ctx.respond("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         view = BlackjackView(self, ctx, bahis)
-        await ctx.send(embed=view.embed(), view=view)
+        await ctx.respond(embed=view.embed(), view=view)
 
     @discord.slash_command(name="slot", description="Belirlediğiniz kredi bahsiyle slot oynar.")
     async def slot(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
-            return await ctx.send("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
+            return await ctx.respond("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         await asyncio.sleep(1)
         reels = [random.choice(["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣"]) for _ in range(3)]
         multiplier = 10 if len(set(reels)) == 1 else 1.5 if len(set(reels)) == 2 else 0
         winnings = int(bahis * multiplier)
         if winnings:
             await self.bot.db.add_balance(ctx.author.id, winnings)
-        await ctx.send(f"🎰 `[ {' | '.join(reels)} ]` Ödülünüz: **{winnings} kredi**.")
+        await ctx.respond(f"🎰 `[ {' | '.join(reels)} ]` Ödülünüz: **{winnings} kredi**.")
 
 
 def setup(bot):

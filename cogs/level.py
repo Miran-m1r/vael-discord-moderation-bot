@@ -44,7 +44,7 @@ class Seviye(commands.Cog):
         embed.add_field(name="Seviye", value=f"**{level}**")
         embed.add_field(name="XP", value=f"**{xp} / {target}**")
         embed.add_field(name="İlerleme", value=f"`{'🟩' * filled}{'⬛' * (10 - filled)}`", inline=False)
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 def setup(bot):
