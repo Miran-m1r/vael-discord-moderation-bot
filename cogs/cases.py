@@ -162,65 +162,70 @@ class Cases(commands.Cog):
 
     @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
     async def buycase(self, ctx: discord.ApplicationContext, kasa_adi: str):
-        # 3 saniye sınırına takılmamak için Discord'a "bekle" sinyali çakıyoruz
-        await ctx.defer()
+        try:
+            # 3 saniye kuralını ezip geçmek için Discord'a "bekle" sinyali
+            await ctx.defer()
 
-        if not await require_channel(ctx, "game_channel"):
-            return
+            if not await require_channel(ctx, "game_channel"):
+                return
 
-        key = kasa_adi.casefold().replace(" ", "")
-        case = CASES.get(key)
-        if case is None:
-            await ctx.respond(
-                "Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
-            return
+            key = kasa_adi.casefold().replace(" ", "")
+            case = CASES.get(key)
+            if case is None:
+                await ctx.respond(
+                    "Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
+                return
 
-        if not await self.bot.db.try_withdraw(ctx.author.id, case.price):
-            await ctx.respond("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
-            return
+            if not await self.bot.db.try_withdraw(ctx.author.id, case.price):
+                await ctx.respond("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
+                return
 
-        opening = discord.Embed(
-            title="🎁 Kasa Açılıyor...",
-            description=f"**{case.name}** açılıyor. Lütfen bekleyiniz...",
-            color=discord.Color.orange(),
-        )
-        opening.set_image(url=OPENING_GIF_URL)
+            opening = discord.Embed(
+                title="🎁 Kasa Açılıyor...",
+                description=f"**{case.name}** açılıyor. Lütfen bekleyiniz...",
+                color=discord.Color.orange(),
+            )
+            opening.set_image(url=OPENING_GIF_URL)
 
-        # Animasyonu yansıt
-        await ctx.respond(embed=opening)
+            await ctx.respond(embed=opening)
 
-        await asyncio.sleep(3)
+            await asyncio.sleep(3)
 
-        item_name, wear, rarity, float_value, price, market_url = create_drop(case)
-        image_url = await resolve_steam_image_url(market_url)
-        item_id = await self.bot.db.add_inventory_item(
-            ctx.author.id, item_name, rarity, float_value, price, image_url
-        )
-
-        result = discord.Embed(
-            title="🎉 Kasa Açıldı",
-            description=(
-                f"**Eşya:** {item_name}\n"
-                f"**Aşınma:** {wear}\n"
-                f"**Nadirlik:** {rarity}\n"
-                f"**Float:** {float_value:.4f}\n"
-                f"**Fiyat:** {price} kredi\n"
-                f"**Eşya ID:** {item_id}"
-            ),
-            color=discord.Color.green(),
-            url=market_url,
-        )
-        if image_url:
-            result.set_image(url=image_url)
-        else:
-            result.add_field(
-                name="Steam Market",
-                value=f"[Eşya listelemesini görüntüle]({market_url})",
-                inline=False,
+            item_name, wear, rarity, float_value, price, market_url = create_drop(case)
+            image_url = await resolve_steam_image_url(market_url)
+            item_id = await self.bot.db.add_inventory_item(
+                ctx.author.id, item_name, rarity, float_value, price, image_url
             )
 
-        # Pycord'da defer edilmiş orijinal mesaj sadece bu komutla hatasız güncellenir
-        await ctx.interaction.edit_original_response(embed=result)
+            result = discord.Embed(
+                title="🎉 Kasa Açıldı",
+                description=(
+                    f"**Eşya:** {item_name}\n"
+                    f"**Aşınma:** {wear}\n"
+                    f"**Nadirlik:** {rarity}\n"
+                    f"**Float:** {float_value:.4f}\n"
+                    f"**Fiyat:** {price} kredi\n"
+                    f"**Eşya ID:** {item_id}"
+                ),
+                color=discord.Color.green(),
+                url=market_url,
+            )
+            if image_url:
+                result.set_image(url=image_url)
+            else:
+                result.add_field(
+                    name="Steam Market",
+                    value=f"[Eşya listelemesini görüntüle]({market_url})",
+                    inline=False,
+                )
+
+            # Asıl çalışan ve asla patlamayan edit komutu budur
+            await ctx.interaction.edit_original_response(embed=result)
+
+        except Exception as e:
+            # Bot arka planda çökerse hatayı yutmasın, direkt chate yazsın amk!
+            await ctx.channel.send(f"🚨 **KOD PATLADI AMK:** `{str(e)}`")
+            print(f"Kasa açma hatası: {e}")
 
     @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
     async def inventory(self, ctx: discord.ApplicationContext):
