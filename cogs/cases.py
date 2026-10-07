@@ -1,5 +1,3 @@
-
-
 import asyncio
 import random
 from urllib.parse import quote
@@ -21,9 +19,14 @@ class CaseDefinition:
 
 
 CASES = {
-    "prisma": CaseDefinition("Prisma Case", 100, ("FAMAS | Crypsis", "AUG | Momentum", "M4A4 | The Emperor", "AWP | Atheris")),
-    "revolution": CaseDefinition("Revolution Case", 500, ("P2000 | Wicked Sick", "M4A1-S | Emphorosaur-S", "AK-47 | Head Shot", "AWP | Duality")),
-    "chroma3": CaseDefinition("Chroma 3 Case", 1000, ("P250 | Asiimov", "SSG 08 | Ghost Crusader", "M4A1-S | Chantico's Fire", "M4A4 | Hellfire")),
+    "prisma": CaseDefinition("Prisma Case", 100,
+                             ("FAMAS | Crypsis", "AUG | Momentum", "M4A4 | The Emperor", "AWP | Atheris")),
+    "revolution": CaseDefinition("Revolution Case", 500,
+                                 ("P2000 | Wicked Sick", "M4A1-S | Emphorosaur-S", "AK-47 | Head Shot",
+                                  "AWP | Duality")),
+    "chroma3": CaseDefinition("Chroma 3 Case", 1000,
+                              ("P250 | Asiimov", "SSG 08 | Ghost Crusader", "M4A1-S | Chantico's Fire",
+                               "M4A4 | Hellfire")),
 }
 
 RARITIES = (
@@ -53,8 +56,8 @@ async def resolve_steam_image_url(listing_url: str) -> str | None:
         timeout = aiohttp.ClientTimeout(total=8)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(
-                listing_url,
-                headers={"User-Agent": "MekanBot/1.0"},
+                    listing_url,
+                    headers={"User-Agent": "MekanBot/1.0"},
             ) as response:
                 if response.status != 200:
                     return None
@@ -88,7 +91,8 @@ class TradeView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.receiver:
-            await interaction.response.send_message("Bu takas teklifi yalnızca alıcı tarafından yanıtlanabilir.", ephemeral=True)
+            await interaction.response.send_message("Bu takas teklifi yalnızca alıcı tarafından yanıtlanabilir.",
+                                                    ephemeral=True)
             return False
         return True
 
@@ -99,7 +103,8 @@ class TradeView(discord.ui.View):
         self.done = True
         item = await self.cog.bot.db.transfer_inventory_item(self.sender.id, self.receiver.id, self.item_id)
         if item is None:
-            await interaction.response.edit_message(content="Eşya bulunamadı veya daha önce transfer edilmiştir.", view=None)
+            await interaction.response.edit_message(content="Eşya bulunamadı veya daha önce transfer edilmiştir.",
+                                                    view=None)
             return
         await interaction.response.edit_message(content="Takas başarıyla tamamlandı.", view=None)
 
@@ -120,28 +125,31 @@ class InventoryView(discord.ui.View):
 
     async def render(self, interaction: discord.Interaction):
         items = await self.cog.bot.db.list_inventory(self.user_id, self.page_size, self.page * self.page_size)
-        description = "\n".join(
-            f"`#{item['id']}` **{item['item_name']}** — {item['rarity']} — {item['float_value']:.4f} — {item['price']} kredi"
-            for item in items
-        ) or "Envanterinizde eşya bulunmamaktadır."
-        embed = discord.Embed(title="Envanter", description=description, color=discord.Color.blurple())
+
+        embed = discord.Embed(title="🎒 Envanterin", color=discord.Color.blurple())
+        if not items:
+            embed.description = "Envanterinizde eşya bulunmamaktadır."
+        else:
+            for item in items:
+                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item[
+                    'image_url'] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
+                embed.add_field(
+                    name=f"🆔 ID: {item['id']} | 🔫 {item['item_name']}",
+                    value=f"✨ **{item['rarity']}** | 🎯 Float: {item['float_value']:.4f} | 💰 {item['price']} Kredi\n{img_link}",
+                    inline=False
+                )
+
         embed.set_footer(text=f"Sayfa {self.page + 1}/{max(1, (self.total + self.page_size - 1) // self.page_size)}")
         await interaction.response.edit_message(embed=embed, view=self)
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Bu envanter yalnızca sahibi tarafından görüntülenebilir.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="Önceki", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="⬅️ Önceki", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page -= 1
         self.previous.disabled = self.page == 0
         self.next.disabled = False
         await self.render(interaction)
 
-    @discord.ui.button(label="Sonraki", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Sonraki ➡️", style=discord.ButtonStyle.secondary)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page += 1
         self.previous.disabled = False
@@ -157,8 +165,19 @@ class Cases(commands.Cog):
     async def cases(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
-        description = "\n".join(f"**{case.name}** — `{case.price}` kredi (`{key}`)" for key, case in CASES.items())
-        await ctx.respond(embed=discord.Embed(title="Kasa Mağazası", description=description, color=discord.Color.gold()))
+
+        embed = discord.Embed(title="📦 Kasa Mağazası",
+                              description="İstediğin kasayı `/buycase <kasa_adi>` yazarak satın alabilirsin.",
+                              color=discord.Color.gold())
+        embed.set_thumbnail(url="https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif")
+
+        for key, case in CASES.items():
+            embed.add_field(
+                name=f"🛒 {case.name} (`{key}`)",
+                value=f"💸 **Fiyat:** {case.price} Kredi",
+                inline=False
+            )
+        await ctx.respond(embed=embed)
 
     @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
     async def buycase(self, ctx: discord.ApplicationContext,
@@ -233,11 +252,20 @@ class Cases(commands.Cog):
         total = await self.bot.db.count_inventory(ctx.author.id)
         view = InventoryView(self, ctx.author.id, 0, total)
         items = await self.bot.db.list_inventory(ctx.author.id, 10, 0)
-        description = "\n".join(
-            f"`#{item['id']}` **{item['item_name']}** — {item['rarity']} — {item['float_value']:.4f} — {item['price']} kredi"
-            for item in items
-        ) or "Envanterinizde eşya bulunmamaktadır."
-        embed = discord.Embed(title="Envanter", description=description, color=discord.Color.blurple())
+
+        embed = discord.Embed(title="🎒 Envanterin", color=discord.Color.blurple())
+        if not items:
+            embed.description = "Envanterinizde eşya bulunmamaktadır."
+        else:
+            for item in items:
+                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item[
+                    'image_url'] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
+                embed.add_field(
+                    name=f"🆔 ID: {item['id']} | 🔫 {item['item_name']}",
+                    value=f"✨ **{item['rarity']}** | 🎯 Float: {item['float_value']:.4f} | 💰 {item['price']} Kredi\n{img_link}",
+                    inline=False
+                )
+
         embed.set_footer(text=f"Sayfa 1/{max(1, (total + 9) // 10)}")
         await ctx.respond(embed=embed, view=view)
 
