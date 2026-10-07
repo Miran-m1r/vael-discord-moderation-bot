@@ -141,8 +141,8 @@ class Moderation(commands.Cog):
 
 
 
-    @commands.command()
-    async def kredi(self, ctx):
+    @discord.slash_command(name="kredi", description="Sosyal kredi puanınızı görüntüler.")
+    async def kredi(self, ctx: discord.ApplicationContext):
         uid = ctx.author.id
         puan = self.trust_scores.get(uid, 100)
 
@@ -243,18 +243,18 @@ class Moderation(commands.Cog):
     # 6. MANUEL KOMUTLAR (Temizle, Mute, Zindan, Ban)
     # ====================================================================
 
-    @commands.command(aliases=['temizle', 'sil'])
+    @discord.slash_command(name="purge", description="Yönetim kanalındaki mesajları toplu olarak siler.")
     @commands.has_permissions(manage_messages=True)
-    async def purge(self, ctx, miktar: int):
+    async def purge(self, ctx: discord.ApplicationContext, miktar: int):
         if not await require_channel(ctx, "admin_channel"): return
         if miktar > 100: return await ctx.send("Tek işlemde en fazla 100 mesaj silebilirsiniz.")
         silinen = await ctx.channel.purge(limit=miktar + 1)
         msg = await ctx.send(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
         await msg.delete(delay=3)
 
-    @commands.command()
+    @discord.slash_command(name="mute", description="Bir üyeyi belirtilen süreyle susturur.")
     @commands.has_permissions(moderate_members=True)
-    async def mute(self, ctx, uye: discord.Member, dakika: int, *, sebep="Çok konuştu"):
+    async def mute(self, ctx: discord.ApplicationContext, uye: discord.Member, dakika: int, sebep: str = "Yönetim kararı"):
         if not await require_channel(ctx, "admin_channel"): return
         sure = datetime.timedelta(minutes=dakika)
         await uye.timeout(sure, reason=sebep)
@@ -268,9 +268,9 @@ class Moderation(commands.Cog):
             embed.add_field(name="Süre/Sebep:", value=f"{dakika} Dk - {sebep}", inline=False)
             await log_kanali.send(embed=embed)
 
-    @commands.command()
+    @discord.slash_command(name="zindan", description="Bir üyeye kısıtlama rolü tanımlar.")
     @commands.has_permissions(manage_roles=True)
-    async def zindan(self, ctx, uye: discord.Member):
+    async def zindan(self, ctx: discord.ApplicationContext, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
         zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
         if not zindan_rolu: return await ctx.send("Kısıtlama rolü bulunamadı.")
@@ -279,9 +279,9 @@ class Moderation(commands.Cog):
         await uye.add_roles(zindan_rolu)
         await ctx.send(f"⛓️ {uye.mention} kullanıcısına kısıtlama rolü tanımlandı.")
 
-    @commands.command()
+    @discord.slash_command(name="ban", description="Bir üyeyi sunucudan uzaklaştırır.")
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx, uye: discord.Member, *, sebep="Yönetim kararı"):
+    async def ban(self, ctx: discord.ApplicationContext, uye: discord.Member, sebep: str = "Yönetim kararı"):
         if not await require_channel(ctx, "admin_channel"): return
         await uye.ban(reason=sebep)
         await ctx.send(f"🔨 **{uye.name}** sunucudan uzaklaştırıldı. Sebep: {sebep}")

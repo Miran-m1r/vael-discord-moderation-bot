@@ -9,37 +9,33 @@ class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.slash_command(name="help", description="Kullanılabilir bot komutlarını listeler.")
+    @discord.slash_command(name="help", description="Kullanılabilir bot komutlarını listeler.")
     async def help_command(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "chat_channel"):
             return
+        commands_by_cog = {}
+        registered = list(getattr(self.bot, "application_commands", []) or [])
+        registered.extend(getattr(self.bot, "pending_application_commands", []) or [])
+        unique = {id(command): command for command in registered}
+        for command in sorted(unique.values(), key=lambda item: item.name):
+            if not getattr(command, "name", None) or command.name == "help":
+                continue
+            cog_name = getattr(command, "cog_name", None) or getattr(
+                getattr(command, "cog", None), "__class__", type("", (), {})
+            ).__name__
+            category = cog_name or "Genel"
+            commands_by_cog.setdefault(category, []).append(
+                f"`/{command.name}` - {getattr(command, 'description', None) or 'Komut açıklaması bulunmuyor.'}"
+            )
         embed = discord.Embed(
             title="MekanBot Yardım",
-            description="Kullanılabilir komutlar ve ilgili kullanım alanları aşağıda listelenmiştir.",
+            description="Botta etkin olan slash komutları aşağıda kategorilere ayrılmıştır.",
             color=discord.Color.blurple(),
         )
-        embed.add_field(
-            name="Ekonomi ve Kasa",
-            value=(
-                "`/cases` — Kasa mağazasını listeler.\n"
-                "`/buycase <kasa>` — Kasa satın alır ve açar.\n"
-                "`/inventory` — Envanteri görüntüler.\n"
-                "`/sell <item_id>` — Eşyayı satar.\n"
-                "`/trade <kullanıcı> <item_id>` — Takas teklifi gönderir.\n"
-                "`!maaş`, `!bakiye`, `!blackjack`, `!slot`"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Satranç",
-            value="`/chess [rakip] [bahis]` — Kullanıcıya veya bota karşı oyun başlatır.\n`/pes` — Devam eden oyundan ayrılır.",
-            inline=False,
-        )
-        embed.add_field(
-            name="Müzik ve Destek",
-            value="`!play`, `!skip`, `!queue`, `!leave` — Müzik işlemleri.\n`!ticket_kur` — Destek panelini oluşturur.",
-            inline=False,
-        )
+        for category, entries in commands_by_cog.items():
+            embed.add_field(name=category, value="\n".join(entries)[:1024], inline=False)
+        if not commands_by_cog:
+            embed.description = "Henüz kayıtlı slash komutu bulunmamaktadır."
         await ctx.send(embed=embed)
 
 

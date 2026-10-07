@@ -25,7 +25,7 @@ Pycord cog mimarisi kullanan, SQLite tabanlı ekonomi, moderasyon, müzik, deste
    python main.py
    ```
 
-İlk çalıştırmada veritabanı tabloları otomatik oluşturulur. Yönetici, kanal kısıtlamalarını tanımlamak için `!kurulum` komutunu kullanmalıdır.
+İlk çalıştırmada veritabanı tabloları otomatik oluşturulur. Yönetici, kanal kısıtlamalarını tanımlamak için `/kurulum` komutunu kullanmalıdır.
 
 `ALLOW_EXTERNAL_AI=true` açıkça ayarlanmadıkça sohbet ve ticket içerikleri harici yapay zekâ hizmetlerine gönderilmez. Etkinleştirildiğinde gönderilen içeriklerde bilinen token, parola ve yetkilendirme bilgileri redakte edilir.
 

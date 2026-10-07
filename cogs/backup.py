@@ -82,10 +82,10 @@ class Backup(commands.Cog):
     # ====================================================================
     # 3. MANUEL YEDEK ALMA (Ne olur ne olmaz komutu)
     # ====================================================================
-    @commands.hybrid_command()
+    @discord.slash_command(name="backup_al", description="Sunucu yapısının yedeğini oluşturur.")
     @commands.has_permissions(administrator=True)
     @admin_role_only()
-    async def backup_al(self, ctx):
+    async def backup_al(self, ctx: discord.ApplicationContext):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
@@ -96,10 +96,10 @@ class Backup(commands.Cog):
     # ====================================================================
     # 4. KIYAMET PROTOKOLÜ (Nuke yiyen sunucuyu baştan inşa etme)
     # ====================================================================
-    @commands.hybrid_command()
+    @discord.slash_command(name="backup_yukle", description="Sunucu yapısını yedekten geri yükler.")
     @commands.has_permissions(administrator=True)
     @admin_role_only()
-    async def backup_yukle(self, ctx):
+    async def backup_yukle(self, ctx: discord.ApplicationContext):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")

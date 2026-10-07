@@ -94,8 +94,8 @@ class Ekonomi(commands.Cog):
     async def balance(self, user_id):
         return int((await self.bot.db.get_economy(user_id))["bakiye"])
 
-    @commands.hybrid_command()
-    async def maaş(self, ctx):
+    @discord.slash_command(name="maas", description="Periyodik maaş ödemenizi almanızı sağlar.")
+    async def maaş(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
         ok, balance, last = await self.bot.db.claim_salary(ctx.author.id, time.time())
@@ -104,13 +104,13 @@ class Ekonomi(commands.Cog):
             return await ctx.send(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
         await ctx.send(f"Maaş ödemesi hesabınıza yatırıldı. Güncel bakiyeniz: **{balance} kredi**.")
 
-    @commands.hybrid_command(aliases=["cüzdan", "para"])
-    async def bakiye(self, ctx):
+    @discord.slash_command(name="bakiye", description="Güncel kredi bakiyenizi görüntüler.")
+    async def bakiye(self, ctx: discord.ApplicationContext):
         if await require_channel(ctx, "game_channel"):
             await ctx.send(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
 
-    @commands.hybrid_command(aliases=["bj"])
-    async def blackjack(self, ctx, bahis: int):
+    @discord.slash_command(name="blackjack", description="Belirlediğiniz kredi bahsiyle blackjack oynar.")
+    async def blackjack(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
@@ -118,8 +118,8 @@ class Ekonomi(commands.Cog):
         view = BlackjackView(self, ctx, bahis)
         await ctx.send(embed=view.embed(), view=view)
 
-    @commands.hybrid_command(aliases=["slots", "kumar"])
-    async def slot(self, ctx, bahis: int):
+    @discord.slash_command(name="slot", description="Belirlediğiniz kredi bahsiyle slot oynar.")
+    async def slot(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):

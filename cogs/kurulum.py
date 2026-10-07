@@ -9,10 +9,9 @@ class Kurulum(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
-    @commands.guild_only()
+    @discord.slash_command(name="kurulum", description="Sunucu kanal ayarlarını etkileşimli olarak yapılandırır.")
     @commands.has_permissions(administrator=True)
-    async def kurulum(self, ctx):
+    async def kurulum(self, ctx: discord.ApplicationContext):
         questions = [
             ("log_channel", "Log Kanalı"), ("game_channel", "Kumar / Oyun Kanalı"),
             ("music_channel", "Müzik Kanalı"), ("chat_channel", "Bot Sohbet Kanalı"),

@@ -112,7 +112,7 @@ class ChessView(discord.ui.View):
 
 
 class ChessInviteView(discord.ui.View):
-    def __init__(self, cog: "Satranc", ctx: commands.Context, opponent: discord.Member, bet: int):
+    def __init__(self, cog: "Satranc", ctx: discord.ApplicationContext, opponent: discord.Member, bet: int):
         super().__init__(timeout=120)
         self.cog, self.ctx, self.opponent, self.bet = cog, ctx, opponent, bet
         self.resolved = False
@@ -198,8 +198,16 @@ class Satranc(commands.Cog):
             result = f"{winner.mention} oyunu kazandı."
         await channel.send(f"**Satranç sonucu:** {result}\n**Açıklama:** {reason}")
 
-    @commands.slash_command(name="chess")
-    async def chess(self, ctx: commands.Context, rakip: discord.Member | None = None, bahis: int = 0):
+    @discord.slash_command(
+        name="chess",
+        description="Bota veya başka bir kullanıcıya karşı satranç oyunu başlatır.",
+    )
+    async def chess(
+        self,
+        ctx: discord.ApplicationContext,
+        rakip: discord.Member | None = None,
+        bahis: int = 0,
+    ):
         if not await require_channel(ctx, "game_channel"):
             return
         if ctx.channel.id in self.active_games:
@@ -232,8 +240,8 @@ class Satranc(commands.Cog):
         )
         await ctx.send(content=rakip.mention, embed=embed, view=ChessInviteView(self, ctx, rakip, bahis))
 
-    @commands.slash_command(name="pes")
-    async def resign(self, ctx: commands.Context):
+    @discord.slash_command(name="pes", description="Devam eden satranç oyunundan ayrılır.")
+    async def resign(self, ctx: discord.ApplicationContext):
         game = self.active_games.get(ctx.channel.id)
         if not game:
             await ctx.send("Bu kanalda devam eden bir satranç oyunu bulunmamaktadır.")

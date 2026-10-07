@@ -11,7 +11,7 @@ except ImportError:
     app_commands = None
 
 
-CommandContext = commands.Context | discord.Interaction
+CommandContext = discord.ApplicationContext | discord.Interaction
 
 
 def _guild(context: CommandContext) -> discord.Guild | None:
@@ -19,7 +19,8 @@ def _guild(context: CommandContext) -> discord.Guild | None:
 
 
 def _author(context: CommandContext) -> discord.User | discord.Member:
-    return context.author if isinstance(context, commands.Context) else context.user
+    author = getattr(context, "author", None)
+    return author if author is not None else context.user
 
 
 def _channel(context: CommandContext) -> discord.abc.GuildChannel | None:
@@ -27,7 +28,8 @@ def _channel(context: CommandContext) -> discord.abc.GuildChannel | None:
 
 
 async def _send(context: CommandContext, content: str):
-    if isinstance(context, discord.Interaction):
+    response = getattr(context, "response", None)
+    if response is not None:
         if context.response.is_done():
             return await context.followup.send(content)
         return await context.response.send_message(content)
@@ -78,7 +80,7 @@ async def require_channel(context: CommandContext, setting: str) -> bool:
     guild = _guild(context)
     if not guild:
         return False
-    bot = context.bot if isinstance(context, commands.Context) else context.client
+    bot = getattr(context, "bot", None) or getattr(context, "client", None)
     settings = await bot.db.get_settings(guild.id)
     channel_id = settings.get(setting) if settings else None
     channel = guild.get_channel(channel_id) if channel_id else None

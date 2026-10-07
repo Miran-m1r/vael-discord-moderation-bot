@@ -16,7 +16,7 @@ class MekanBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(
-            command_prefix="!",
+            command_prefix=[],
             intents=intents,
             help_command=None,
             proxy=os.getenv("DISCORD_PROXY", DEFAULT_DISCORD_PROXY),
@@ -36,10 +36,6 @@ class MekanBot(commands.Bot):
     async def close(self):
         await self.db.close()
         await super().close()
-
-    async def on_message(self, message):
-        if not message.author.bot:
-            await self.process_commands(message)
 
     async def on_ready(self):
         if not self._synced:
