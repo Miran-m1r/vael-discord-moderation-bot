@@ -208,7 +208,7 @@ class Cases(commands.Cog):
                 inline=False,
             )
         # Pycord updates the deferred interaction through the application context.
-        await ctx.edit(embed=result)
+        await msg.edit(embed=result)
 
     @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
     async def inventory(self, ctx: discord.ApplicationContext):
