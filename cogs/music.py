@@ -88,7 +88,7 @@ class Muzik(commands.Cog):
                 print(f"Sıradaki şarkıya geçerken patladık: {e}")
         else:
             # Kuyruk bittiyse botu ses kanalında boş boş bekletme
-            coroutine = ctx.send("💽 Çalma kuyruğu sona erdi. Yeni bir parça eklenmezse bağlantı sonlandırılacaktır.")
+            coroutine = ctx.respond("💽 Çalma kuyruğu sona erdi. Yeni bir parça eklenmezse bağlantı sonlandırılacaktır.")
             asyncio.run_coroutine_threadsafe(coroutine, self.bot.loop)
 
     async def sarki_oynat(self, ctx, arama_sorgusu):
@@ -102,9 +102,9 @@ class Muzik(commands.Cog):
 
             embed = discord.Embed(title="🔊 Çalma Başlatıldı", description=f"**{oynatici.title}**",
                                   color=discord.Color.brand_green())
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
         except Exception as e:
-            await ctx.send(f"Parça başlatılamadı. Ayrıntı: {str(e)[:100]}")
+            await ctx.respond(f"Parça başlatılamadı. Ayrıntı: {str(e)[:100]}")
             self.siradaki_sarkiya_gec(ctx)  # Hata verirse sıradakine atla
 
     # ====================================================================
@@ -116,11 +116,11 @@ class Muzik(commands.Cog):
         if not await require_channel(ctx, "music_channel"):
             return
         if not valid_music_query(arama_sorgusu):
-            return await ctx.send(
+            return await ctx.respond(
                 "Yalnızca YouTube bağlantıları veya arama ifadeleri kullanılabilir."
             )
         if not ctx.author.voice:
-            return await ctx.send("Lütfen önce bir ses kanalına katılınız.")
+            return await ctx.respond("Lütfen önce bir ses kanalına katılınız.")
 
         ses_kanali = ctx.voice_client
 
@@ -129,7 +129,7 @@ class Muzik(commands.Cog):
             await ctx.author.voice.channel.connect()
             ses_kanali = ctx.voice_client
         elif ses_kanali.channel != ctx.author.voice.channel:
-            return await ctx.send("Bot farklı bir ses kanalında bulunmaktadır. Lütfen aynı kanala katılınız.")
+            return await ctx.respond("Bot farklı bir ses kanalında bulunmaktadır. Lütfen aynı kanala katılınız.")
 
         sunucu_id = ctx.guild.id
         if sunucu_id not in self.kuyruk:
@@ -138,11 +138,11 @@ class Muzik(commands.Cog):
         # Eğer bot o an bir şey çalıyorsa, şarkıyı sıraya (kuyruğa) ekle
         if ses_kanali.is_playing() or ses_kanali.is_paused():
             self.kuyruk[sunucu_id].append(arama_sorgusu)
-            await ctx.send(
+            await ctx.respond(
                 f"🎶 Parça kuyruğa eklendi: **{arama_sorgusu}**. Kuyrukta {len(self.kuyruk[sunucu_id])} parça bulunmaktadır.")
         else:
             # Bot boş yatıyorsa direkt müziği patlat
-            mesaj = await ctx.send("⏳ Parça aranıyor ve oynatma hazırlanıyor...")
+            mesaj = await ctx.respond("⏳ Parça aranıyor ve oynatma hazırlanıyor...")
             await self.sarki_oynat(ctx, arama_sorgusu)
             await mesaj.delete()
 
@@ -153,9 +153,9 @@ class Muzik(commands.Cog):
             return
         ses_kanali = ctx.voice_client
         if not ses_kanali or not ses_kanali.is_playing():
-            return await ctx.send("Şu anda atlanabilecek bir parça bulunmamaktadır.")
+            return await ctx.respond("Şu anda atlanabilecek bir parça bulunmamaktadır.")
 
-        await ctx.send("⏭️ Mevcut parça atlanıyor; sıradaki parçaya geçiliyor.")
+        await ctx.respond("⏭️ Mevcut parça atlanıyor; sıradaki parçaya geçiliyor.")
         ses_kanali.stop()  # Stop dediğimiz an otomatik olarak `after` callback'i çalışır ve sıradaki çalar.
 
     @discord.slash_command(name="queue", description="Müzik kuyruğunu görüntüler.")
@@ -165,7 +165,7 @@ class Muzik(commands.Cog):
             return
         sunucu_id = ctx.guild.id
         if sunucu_id not in self.kuyruk or not self.kuyruk[sunucu_id]:
-            return await ctx.send("Çalma kuyruğu boş durumdadır.")
+            return await ctx.respond("Çalma kuyruğu boş durumdadır.")
 
         liste = "\n".join([f"{i + 1}. {sarki}" for i, sarki in enumerate(self.kuyruk[sunucu_id][:10])])
 
@@ -173,7 +173,7 @@ class Muzik(commands.Cog):
         if len(self.kuyruk[sunucu_id]) > 10:
             embed.set_footer(text=f"...ve {len(self.kuyruk[sunucu_id]) - 10} parça daha bulunmaktadır.")
 
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
     @discord.slash_command(name="leave", description="Botu ses kanalından çıkarır ve kuyruğu temizler.")
     async def leave(self, ctx: discord.ApplicationContext):
@@ -184,9 +184,9 @@ class Muzik(commands.Cog):
         if ses_kanali:
             self.kuyruk[ctx.guild.id] = []  # Kuyruğu çöpe at
             await ses_kanali.disconnect()
-            await ctx.send("🔌 Ses bağlantısı sonlandırıldı.")
+            await ctx.respond("🔌 Ses bağlantısı sonlandırıldı.")
         else:
-            await ctx.send("Bot şu anda herhangi bir ses kanalında bulunmamaktadır.")
+            await ctx.respond("Bot şu anda herhangi bir ses kanalında bulunmamaktadır.")
 
 
 def setup(bot):

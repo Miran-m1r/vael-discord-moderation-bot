@@ -211,43 +211,43 @@ class Satranc(commands.Cog):
         if not await require_channel(ctx, "game_channel"):
             return
         if ctx.channel.id in self.active_games:
-            await ctx.send("Bu kanalda hâlihazırda devam eden bir satranç oyunu bulunmaktadır.")
+            await ctx.respond("Bu kanalda hâlihazırda devam eden bir satranç oyunu bulunmaktadır.")
             return
         if bahis < 0:
-            await ctx.send("Bahis tutarı sıfır veya daha büyük olmalıdır.")
+            await ctx.respond("Bahis tutarı sıfır veya daha büyük olmalıdır.")
             return
         if rakip is None:
             if bahis and not await self.bot.db.try_withdraw(ctx.author.id, bahis):
-                await ctx.send("Bakiyeniz belirtilen bahis için yeterli değildir.")
+                await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
                 return
             game = {
                 "board": chess.Board(), "players": [ctx.author, self.bot.user],
                 "turn": ctx.author, "bet": bahis, "bot_mode": True,
             }
             self.active_games[ctx.channel.id] = game
-            await ctx.send("Bota karşı satranç oyunu başlatıldı.")
+            await ctx.respond("Bota karşı satranç oyunu başlatıldı.")
             await self.update_game_message(ctx.channel, ChessView(self, ctx.channel, game))
             return
         if rakip == ctx.author or rakip.bot:
-            await ctx.send("Geçerli bir rakip kullanıcı belirtiniz.")
+            await ctx.respond("Geçerli bir rakip kullanıcı belirtiniz.")
             return
         if bahis and (await self.bot.db.get_economy(ctx.author.id))["bakiye"] < bahis:
-            await ctx.send("Bakiyeniz belirtilen bahis için yeterli değildir.")
+            await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
             return
         embed = discord.Embed(
             title="Satranç Daveti",
             description=f"{ctx.author.mention}, {rakip.mention} kullanıcısını {bahis} kredi bahisli bir oyuna davet etti.",
         )
-        await ctx.send(content=rakip.mention, embed=embed, view=ChessInviteView(self, ctx, rakip, bahis))
+        await ctx.respond(content=rakip.mention, embed=embed, view=ChessInviteView(self, ctx, rakip, bahis))
 
     @discord.slash_command(name="pes", description="Devam eden satranç oyunundan ayrılır.")
     async def resign(self, ctx: discord.ApplicationContext):
         game = self.active_games.get(ctx.channel.id)
         if not game:
-            await ctx.send("Bu kanalda devam eden bir satranç oyunu bulunmamaktadır.")
+            await ctx.respond("Bu kanalda devam eden bir satranç oyunu bulunmamaktadır.")
             return
         if ctx.author not in game["players"]:
-            await ctx.send("Bu oyunun oyuncusu değilsiniz.")
+            await ctx.respond("Bu oyunun oyuncusu değilsiniz.")
             return
         winner = next(player for player in game["players"] if player != ctx.author)
         await self.finish_game(ctx.channel, winner, "Oyunculardan biri oyundan ayrıldı.")

@@ -88,8 +88,8 @@ class Backup(commands.Cog):
     async def backup_al(self, ctx: discord.ApplicationContext):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
-            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
-        mesaj = await ctx.send("⏳ Sunucu yedeği oluşturuluyor. Lütfen bekleyiniz...")
+            return await ctx.respond("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
+        mesaj = await ctx.respond("⏳ Sunucu yedeği oluşturuluyor. Lütfen bekleyiniz...")
         await self.yedek_olustur(ctx.guild)
         await mesaj.edit(content="✅ **Sunucu yedeği oluşturuldu.** Sunucuya özel yedek dosyası hazır.")
 
@@ -102,12 +102,12 @@ class Backup(commands.Cog):
     async def backup_yukle(self, ctx: discord.ApplicationContext):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
-            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
+            return await ctx.respond("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         backup_path = self.backup_path(ctx.guild.id)
         if not os.path.exists(backup_path):
-            return await ctx.send("Yüklenecek bir yedek dosyası bulunamadı.")
+            return await ctx.respond("Yüklenecek bir yedek dosyası bulunamadı.")
 
-        onay_mesaji = await ctx.send(
+        onay_mesaji = await ctx.respond(
             f"⚠️ **UYARI!** Bu işlem {ctx.guild.name} sunucusundaki mevcut kanalları ve rolleri silerek "
             "sunucuya ait yedekteki yapıyı geri yükleyecektir. "
             "Devam etmek için `Evet` yazınız.")
@@ -118,18 +118,18 @@ class Backup(commands.Cog):
         try:
             await self.bot.wait_for('message', timeout=15.0, check=check)
         except asyncio.TimeoutError:
-            return await ctx.send("Onay süresi doldu. Geri yükleme işlemi iptal edildi.")
+            return await ctx.respond("Onay süresi doldu. Geri yükleme işlemi iptal edildi.")
 
-        await ctx.send("☢️ **Geri yükleme işlemi başlatıldı. Mevcut sunucu yapısı yeniden oluşturulacaktır.** ☢️")
+        await ctx.respond("☢️ **Geri yükleme işlemi başlatıldı. Mevcut sunucu yapısı yeniden oluşturulacaktır.** ☢️")
 
         # Dosyayı oku
         try:
             with open(backup_path, "r", encoding="utf-8") as f:
                 yedek = json.load(f)
         except (OSError, json.JSONDecodeError):
-            return await ctx.send("Yedek dosyası okunamadı; geri yükleme işlemi başlatılmadı.")
+            return await ctx.respond("Yedek dosyası okunamadı; geri yükleme işlemi başlatılmadı.")
         if yedek.get("guild_id") != ctx.guild.id:
-            return await ctx.send("Yedek dosyası bu sunucuya ait değildir; işlem iptal edildi.")
+            return await ctx.respond("Yedek dosyası bu sunucuya ait değildir; işlem iptal edildi.")
 
         # 1. YIKIM AŞAMASI (Her şeyi sil)
         for kanal in ctx.guild.channels:

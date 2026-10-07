@@ -36,7 +36,7 @@ class Help(commands.Cog):
             embed.add_field(name=category, value="\n".join(entries)[:1024], inline=False)
         if not commands_by_cog:
             embed.description = "Henüz kayıtlı slash komutu bulunmamaktadır."
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 def setup(bot):

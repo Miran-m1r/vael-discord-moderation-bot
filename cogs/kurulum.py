@@ -19,9 +19,9 @@ class Kurulum(commands.Cog):
             ("ticket_channel", "Ticket Paneli Kanalı"),
         ]
         ids = {}
-        await ctx.send("Kurulum başlatıldı. Lütfen her soru için kanal ID'sini veya kanal etiketini 60 saniye içinde gönderiniz.")
+        await ctx.respond("Kurulum başlatıldı. Lütfen her soru için kanal ID'sini veya kanal etiketini 60 saniye içinde gönderiniz.")
         for key, label in questions:
-            await ctx.send(f"**{label}:**")
+            await ctx.respond(f"**{label}:**")
 
             def check(message):
                 return message.author == ctx.author and message.channel == ctx.channel
@@ -29,7 +29,7 @@ class Kurulum(commands.Cog):
             try:
                 answer = await self.bot.wait_for("message", timeout=60, check=check)
             except asyncio.TimeoutError:
-                await ctx.send("Kurulum zaman aşımına uğradı; herhangi bir değişiklik kaydedilmedi.")
+                await ctx.respond("Kurulum zaman aşımına uğradı; herhangi bir değişiklik kaydedilmedi.")
                 return
             channel = answer.channel_mentions[0] if answer.channel_mentions else None
             if channel is None:
@@ -38,11 +38,11 @@ class Kurulum(commands.Cog):
                 except ValueError:
                     channel = None
             if not isinstance(channel, discord.TextChannel):
-                await ctx.send("Bu ayar için metin kanalı ID'si/etiketi gerekli; kurulum iptal edildi.")
+                await ctx.respond("Bu ayar için metin kanalı ID'si/etiketi gerekli; kurulum iptal edildi.")
                 return
             ids[key] = channel.id
         await self.bot.db.save_settings(ctx.guild.id, **ids)
-        await ctx.send("✅ Kurulum tamamlandı. Kanal ayarları veritabanına kaydedildi.")
+        await ctx.respond("✅ Kurulum tamamlandı. Kanal ayarları veritabanına kaydedildi.")
 
 
 def setup(bot):
