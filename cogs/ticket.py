@@ -4,6 +4,7 @@ import io
 import os
 from dotenv import load_dotenv,find_dotenv
 from openai import AsyncOpenAI
+from utils.discord_compat import add_cog
 
 load_dotenv(find_dotenv())
 
@@ -19,7 +20,7 @@ class TicketİciView(discord.ui.View):
     # --- TIER-1 AI DESTEK AJANI ---
     @discord.ui.button(label="🤖 Yapay Zekaya Sor", style=discord.ButtonStyle.success, custom_id="ai_destek_buton")
     async def ai_destek(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🧠 *Ajan konuşmaları okuyor ve çözüm üretiyor, bekle amk...*",
+        await interaction.response.send_message("🧠 *Görüşme geçmişi inceleniyor ve çözüm hazırlanıyor. Lütfen bekleyiniz...*",
                                                 ephemeral=False)
 
         # Kanaldaki son 20 mesajı al (LLM'e bağlam sunmak için)
@@ -28,7 +29,7 @@ class TicketİciView(discord.ui.View):
 
         if not sohbet_gecmisi.strip():
             return await interaction.channel.send(
-                "Ulan derdini yazmamışsın ki yapay zeka neye cevap versin? Önce sorununu yaz!")
+                "Çözüm oluşturulabilmesi için lütfen önce talebinizi açıklayınız.")
 
         # LLM'e Prompt Çakıyoruz
         try:
@@ -47,13 +48,13 @@ class TicketİciView(discord.ui.View):
                                   color=discord.Color.brand_green())
             await interaction.channel.send(embed=embed)
         except Exception as e:
-            await interaction.channel.send("Yapay zeka motoru şu an patlak, yetkili bekleyeceksin aslanım.")
+            await interaction.channel.send("Yapay zekâ hizmeti şu anda kullanılamıyor. Lütfen destek ekibinin yanıtını bekleyiniz.")
             print(f"LLM Hatası: {e}")
 
     # --- TİCKET KAPATMA VE AI ÖZETLEME ---
     @discord.ui.button(label="🔒 Talebi Kapat", style=discord.ButtonStyle.danger, custom_id="ticket_kapat_buton")
     async def kapat(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("⏳ Kanal 10 saniye içinde buharlaşıyor, AI log özetini çıkarıyor...",
+        await interaction.response.send_message("⏳ Kanal 10 saniye içinde arşivlenecek. Görüşme özeti hazırlanıyor...",
                                                 ephemeral=True)
 
         mesajlar = [m async for m in interaction.channel.history(limit=None, oldest_first=True)]
@@ -123,11 +124,11 @@ class TicketAcView(discord.ui.View):
         yeni_kanal = await guild.create_text_channel(kanal_adi, overwrites=overwrites,
                                                      category=interaction.channel.category)
 
-        await interaction.response.send_message(f"✅ Talebin oluşturuldu aslanım: {yeni_kanal.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ Destek talebiniz oluşturuldu: {yeni_kanal.mention}", ephemeral=True)
 
         embed = discord.Embed(
             title="Destek Talebi",
-            description=f"Hoş geldin {interaction.user.mention}. Derdini yaz. Yetkili beklemek istemiyorsan aşağıdaki **🤖 Yapay Zekaya Sor** butonuna basarak anında destek alabilirsin.",
+            description=f"Merhaba {interaction.user.mention}. Talebinizi bu kanala yazabilirsiniz. Destek almak için aşağıdaki **🤖 Yapay Zekaya Sor** düğmesini kullanabilirsiniz.",
             color=discord.Color.green()
         )
         # Bütün butonları (AI ve Kapatma) içeren View'i gönderiyoruz
@@ -152,7 +153,7 @@ class Ticket(commands.Cog):
     async def on_ready(self):
         self.bot.add_view(TicketAcView(self))
         self.bot.add_view(TicketİciView(self))
-        print("LLM Destekli Ticket modülü fişek gibi yüklendi.")
+        print("LLM destekli ticket modülü başarıyla yüklendi.")
 
     @commands.command()
     @commands.has_permissions(administrator=True)
@@ -162,11 +163,11 @@ class Ticket(commands.Cog):
             return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
-            description="Bir derdin varsa aşağıdaki butona tıkla. Yapay zeka ajanımız ve yetkililerimiz sana yardımcı olacak.",
+            description="Destek talebi oluşturmak için aşağıdaki düğmeyi kullanınız. Destek ekibimiz ve yapay zekâ asistanımız size yardımcı olacaktır.",
             color=discord.Color.blurple()
         )
         await ctx.send(embed=embed, view=TicketAcView(self))
 
 
-async def setup(bot):
-    await bot.add_cog(Ticket(bot))
+def setup(bot):
+    return add_cog(bot, Ticket(bot))

@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv, find_dotenv
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 load_dotenv(find_dotenv())
 
@@ -27,7 +28,7 @@ class Genel(commands.Cog):
         # Sahibin ID'sini bulup DM nesnesini oluşturalım
         sahip = await self.bot.fetch_user(self.sahip_id)
         if not sahip:
-            return await ctx.send("Sistemde sahip ID'si bulunamadı amk, bana geri bildirim atamazsın.")
+            return await ctx.send("Sistem yöneticisi tanımlanamadığı için geri bildiriminiz iletilemedi.")
 
         # Sana gelecek şekilli şüküllü Embed raporu
         embed = discord.Embed(
@@ -46,12 +47,12 @@ class Genel(commands.Cog):
 
             # Adama kanaldan geçici olarak onay verelim (3 saniye sonra uçuyor)
             gecici_mesaj = await ctx.send(
-                f"✅ {ctx.author.mention}, geri bildirimin mekanın sahibine (senin DM'e) başarıyla iletildi. Sağ ol aslanım!")
+                f"✅ {ctx.author.mention}, geri bildiriminiz sistem yöneticisine başarıyla iletildi. Teşekkür ederiz.")
             await gecici_mesaj.delete(delay=3)
 
         except Exception as e:
-            await ctx.send(f"Bildirimi iletirken bi aksilik çıktı amk: {e}")
+            await ctx.send(f"Geri bildirim iletilirken bir hata oluştu: {e}")
 
 
-async def setup(bot):
-    await bot.add_cog(Genel(bot))
+def setup(bot):
+    return add_cog(bot, Genel(bot))

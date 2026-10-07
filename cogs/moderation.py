@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from openai import AsyncOpenAI
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 
 load_dotenv(find_dotenv())
@@ -61,7 +62,7 @@ class Moderation(commands.Cog):
             return "EVET" in cevap
 
         except Exception as e:
-            print(f"LLM API Patladı amk: {e}")
+            print(f"LLM API çağrısı başarısız oldu: {e}")
             return False
 
     async def guven_puani_kes(self, member, miktar, sebep):
@@ -85,14 +86,14 @@ class Moderation(commands.Cog):
                 eski_roller = [r for r in member.roles if r.name != "@everyone"]
                 await member.remove_roles(*eski_roller)
                 await member.add_roles(zindan_rolu)
-                await log_kanali.send(f"⛓️ **{member.name}** kredisini tüketti ve Zindana atıldı!")
+                await log_kanali.send(f"⛓️ **{member.name}** kullanıcısının sosyal kredi puanı kritik seviyeye düştü ve kısıtlandı.")
 
         elif guncel_puan <= 30:
             sure = datetime.timedelta(hours=2)
             try:
                 await member.timeout(sure, reason="Sosyal kredi 30'un altına düştü.")
                 await log_kanali.send(
-                    f"🔇 **{member.name}** kredisini ({guncel_puan}) çok düşürdüğü için 2 saat susturuldu.")
+                    f"🔇 **{member.name}** kullanıcısı düşük sosyal kredi puanı ({guncel_puan}) nedeniyle 2 saat süreyle susturuldu.")
             except:
                 pass
 
@@ -109,7 +110,7 @@ class Moderation(commands.Cog):
 
         if self.banned_words_regex.search(bosluksuz) or self.ads_regex.search(bosluksuz):
             await message.delete()
-            await message.channel.send(f"{message.author.mention} Mekanda düzgün konuş, kredi puanını yakma!")
+            await message.channel.send(f"{message.author.mention} Lütfen topluluk kurallarına uygun bir dil kullanınız.")
             await self.guven_puani_kes(message.author, 5, "Açıkça küfür veya reklam/link paylaştı.")
             return
 
@@ -118,7 +119,7 @@ class Moderation(commands.Cog):
             if is_toxic:
                 await message.delete()
                 await message.channel.send(
-                    f"{message.author.mention} Kelime oyunu yapma lan, o dolaylı laf sokmaları yapay zeka yemez!")
+                    f"{message.author.mention} Dolaylı veya saldırgan ifadeler kullanmayınız.")
                 await self.guven_puani_kes(message.author, 10,
                                            "AI tarafından pasif-agresif / gizli toksiklik algılandı.")
                 return
@@ -141,13 +142,13 @@ class Moderation(commands.Cog):
         puan = self.trust_scores.get(uid, 100)
 
         if puan >= 90:
-            durum = "Tertemiz adamsın, mekanın krallarındansın."
+            durum = "Sosyal kredi puanınız yüksek ve hesabınız iyi durumdadır."
         elif puan >= 60:
-            durum = "Ufaktan vukuatların var ama toparlarsın, dikkat et."
+            durum = "Sosyal kredi puanınız orta seviyededir. Lütfen topluluk kurallarına dikkat ediniz."
         elif puan >= 30:
-            durum = "İnce buzdasıın kardeşim, bir hatanda ağzını bantlarlar."
+            durum = "Sosyal kredi puanınız düşük seviyededir. Yeni ihlaller ek kısıtlamalara neden olabilir."
         else:
-            durum = "Tek ayağın çukurda, ha siktir edildin ha edileceksin!"
+            durum = "Sosyal kredi puanınız kritik seviyededir ve hesabınız kısıtlanma riski taşımaktadır."
 
         embed = discord.Embed(title="💳 Sosyal Kredi Skoru", color=discord.Color.blurple())
         embed.add_field(name="Mevcut Puanın:", value=f"**{puan} / 100**", inline=False)
@@ -164,7 +165,7 @@ class Moderation(commands.Cog):
 
         if message.mentions:
             await message.channel.send(
-                f"👻 **{message.author.name}** birilerini etiketleyip sildi! Yemedi mi lan?\nSildiği mesaj: `{message.content}`")
+                f"👻 **{message.author.name}** kullanıcısı etiket içeren bir mesajı sildi.\nSilinen mesaj: `{message.content}`")
             await self.guven_puani_kes(message.author, 5, "Ghost-Ping (Hayalet Etiket) attı.")
 
     @commands.Cog.listener()
@@ -173,7 +174,7 @@ class Moderation(commands.Cog):
 
         log_kanali = await self.log_channel(before.guild)
         if log_kanali:
-            embed = discord.Embed(title="✍️ Şark Kurnazı Mesaj Düzenledi!", color=discord.Color.light_grey())
+            embed = discord.Embed(title="✍️ Mesaj Düzenlendi", color=discord.Color.light_grey())
             embed.add_field(name="Kişi:", value=before.author.name, inline=False)
             embed.add_field(name="Önceki Hali:", value=before.content or "Boş", inline=False)
             embed.add_field(name="Sonraki Hali:", value=after.content or "Boş", inline=False)
@@ -203,7 +204,7 @@ class Moderation(commands.Cog):
             except:
                 if log_kanali:
                     await log_kanali.send(
-                        f"🚨 **DARBE VAR AMA GÜCÜM YETMEDİ!** 🚨\n{admin_user.name} sunucuyu patlatıyor, rolü benden yüksek olduğu için alamadım. ÇABUK GEL AMK!")
+                        f"🚨 **Yetki müdahalesi tamamlanamadı.** 🚨\n{admin_user.name} kullanıcısının rolleri botun yetkileri yetersiz olduğu için kaldırılamadı.")
             self.nuke_tracker[uid] = []
 
     @commands.Cog.listener()
@@ -235,7 +236,7 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx, miktar: int):
         if not await require_channel(ctx, "admin_channel"): return
-        if miktar > 100: return await ctx.send("Yavaş amk, tek seferde max 100.")
+        if miktar > 100: return await ctx.send("Tek işlemde en fazla 100 mesaj silebilirsiniz.")
         silinen = await ctx.channel.purge(limit=miktar + 1)
         msg = await ctx.send(f"🧹 {len(silinen) - 1} mesaj buharlaştırıldı.")
         await msg.delete(delay=3)
@@ -261,18 +262,18 @@ class Moderation(commands.Cog):
     async def zindan(self, ctx, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
         zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
-        if not zindan_rolu: return await ctx.send("Zindan rolü bulunamadı amk.")
+        if not zindan_rolu: return await ctx.send("Kısıtlama rolü bulunamadı.")
         eski_roller = [r for r in uye.roles if r.name != "@everyone"]
         await uye.remove_roles(*eski_roller)
         await uye.add_roles(zindan_rolu)
-        await ctx.send(f"⛓️ {uye.mention} paketlendi! Zindanda çürüyecek.")
+        await ctx.send(f"⛓️ {uye.mention} kullanıcısına kısıtlama rolü tanımlandı.")
 
     @commands.command()
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx, uye: discord.Member, *, sebep="Mekanın sahibi öyle istedi"):
+    async def ban(self, ctx, uye: discord.Member, *, sebep="Yönetim kararı"):
         if not await require_channel(ctx, "admin_channel"): return
         await uye.ban(reason=sebep)
-        await ctx.send(f"🔨 {uye.name} sunucudan siktir edildi! Sebep: {sebep}")
+        await ctx.send(f"🔨 **{uye.name}** sunucudan uzaklaştırıldı. Sebep: {sebep}")
 
 
 
@@ -312,5 +313,5 @@ class Moderation(commands.Cog):
                                                       color=discord.Color.orange()))
 
 
-async def setup(bot):
-    await bot.add_cog(Moderation(bot))
+def setup(bot):
+    return add_cog(bot, Moderation(bot))

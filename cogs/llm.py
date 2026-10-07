@@ -5,6 +5,7 @@ import asyncio
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 load_dotenv()
 
@@ -40,7 +41,7 @@ class Sohbet(commands.Cog):
         icerik = message.clean_content.replace(f"@{self.bot.user.name}", "").strip()
 
         if not icerik:
-            return await message.reply("Eee? Ne diyorsun amk boş boş etiketleyip durma.")
+            return await message.reply("Lütfen bot için bir soru veya talep belirtiniz.")
         if self.ai_client is None:
             return await message.reply("AI servisi yapılandırılmamış.")
 
@@ -50,10 +51,10 @@ class Sohbet(commands.Cog):
                 self.kisi_hafizalari[key] = [{
                     "role": "system",
                     "content": (
-                        "Sen bu Discord sunucusunun belkemiği, mekanın yapay zeka assistanısın. "
-                        "Sokak ağzıyla, samimi, gerektiğinde sert ve argolu konuşuyorsun. "
-                        "Karşındaki insanlara 'kanka', 'aslanım', 'piç', 'amk', 'lan' falan diyebilirsin. "
-                        "Kısa, net, zekice ve iğneleyici cevaplar ver. Kimseye boyun eğme, mekanın sahibi sensin."
+                        "Siz bu Discord sunucusunun resmi yapay zekâ asistanısınız. "
+                        "Her zaman kurumsal, ciddi, açık ve kibar bir Türkçe kullanınız. "
+                        "Argo, küfür, küçümseyici ifadeler ve samimi hitaplar kullanmayınız. "
+                        "Yanıtlarınızı kısa, anlaşılır ve çözüm odaklı veriniz."
                     )
                 }]
 
@@ -78,8 +79,8 @@ class Sohbet(commands.Cog):
                     if history and history[-1]["role"] == "user" and history[-1]["content"] == icerik:
                         history.pop()
                     print(f"Chatbot patladı: {e}")
-                    await message.reply("Kafam yandı amk, API'de bir bokluk var az bekle sonra tekrar yaz.")
+                    await message.reply("Yapay zekâ hizmeti sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyiniz.")
 
 
-async def setup(bot):
-    await bot.add_cog(Sohbet(bot))
+def setup(bot):
+    return add_cog(bot, Sohbet(bot))

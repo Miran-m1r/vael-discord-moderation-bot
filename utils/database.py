@@ -34,7 +34,20 @@ class Database:
             guild_id INTEGER PRIMARY KEY, log_channel INTEGER, game_channel INTEGER,
             music_channel INTEGER, chat_channel INTEGER, admin_channel INTEGER
         );
+        CREATE TABLE IF NOT EXISTS inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            item_name TEXT NOT NULL,
+            rarity TEXT NOT NULL,
+            float_value REAL NOT NULL,
+            price INTEGER NOT NULL,
+            image_url TEXT
+        );
         """)
+        try:
+            await self.connection.execute("ALTER TABLE inventory ADD COLUMN image_url TEXT")
+        except aiosqlite.OperationalError:
+            pass
         await self.connection.commit()
 
     async def close(self) -> None:
@@ -104,6 +117,28 @@ class Database:
             await self.connection.commit()
             return cursor.rowcount == 1
 
+    async def try_withdraw_pair(self, first_user_id: int, second_user_id: int, amount: int) -> bool:
+        if not self.connection:
+            raise RuntimeError("Database is not connected")
+        if amount <= 0 or first_user_id == second_user_id:
+            return False
+        async with self._lock:
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (first_user_id,))
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (second_user_id,))
+            async with self.connection.execute(
+                "SELECT user_id, bakiye FROM ekonomi WHERE user_id IN (?, ?)",
+                (first_user_id, second_user_id),
+            ) as cursor:
+                balances = {int(row["user_id"]): int(row["bakiye"]) for row in await cursor.fetchall()}
+            if balances.get(first_user_id, 0) < amount or balances.get(second_user_id, 0) < amount:
+                return False
+            await self.connection.execute(
+                "UPDATE ekonomi SET bakiye = bakiye - ? WHERE user_id IN (?, ?)",
+                (amount, first_user_id, second_user_id),
+            )
+            await self.connection.commit()
+            return True
+
     async def claim_salary(self, user_id: int, now: float) -> tuple[bool, int, float]:
         if not self.connection:
             raise RuntimeError("Database is not connected")
@@ -143,3 +178,75 @@ class Database:
             (xp, level, now, user_id))
         await self.connection.commit()
         return {"xp": xp, "level": level, "son_mesaj": now}
+
+    async def add_inventory_item(
+        self, user_id: int, item_name: str, rarity: str, float_value: float, price: int,
+        image_url: str | None = None
+    ) -> int:
+        if not self.connection:
+            raise RuntimeError("Database is not connected")
+        async with self._lock:
+            cursor = await self.connection.execute(
+                """INSERT INTO inventory (user_id, item_name, rarity, float_value, price, image_url)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (user_id, item_name, rarity, float_value, price, image_url),
+            )
+            await self.connection.commit()
+            return int(cursor.lastrowid)
+
+    async def list_inventory(self, user_id: int, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
+        if not self.connection:
+            raise RuntimeError("Database is not connected")
+        async with self.connection.execute(
+            """SELECT id, item_name, rarity, float_value, price, image_url
+               FROM inventory WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?""",
+            (user_id, limit, offset),
+        ) as cursor:
+            return [dict(row) for row in await cursor.fetchall()]
+
+    async def count_inventory(self, user_id: int) -> int:
+        row = await self._one("SELECT COUNT(*) AS count FROM inventory WHERE user_id = ?", (user_id,))
+        return int(row["count"])
+
+    async def owns_inventory_item(self, user_id: int, item_id: int) -> bool:
+        row = await self._one(
+            "SELECT 1 FROM inventory WHERE id = ? AND user_id = ?", (item_id, user_id)
+        )
+        return row is not None
+
+    async def sell_inventory_item(self, user_id: int, item_id: int) -> int | None:
+        if not self.connection:
+            raise RuntimeError("Database is not connected")
+        async with self._lock:
+            row = await self._one(
+                "SELECT price FROM inventory WHERE id = ? AND user_id = ?", (item_id, user_id)
+            )
+            if row is None:
+                return None
+            await self.connection.execute("INSERT OR IGNORE INTO ekonomi (user_id) VALUES (?)", (user_id,))
+            await self.connection.execute(
+                "DELETE FROM inventory WHERE id = ? AND user_id = ?", (item_id, user_id)
+            )
+            await self.connection.execute(
+                "UPDATE ekonomi SET bakiye = bakiye + ? WHERE user_id = ?", (int(row["price"]), user_id)
+            )
+            await self.connection.commit()
+            return int(row["price"])
+
+    async def transfer_inventory_item(self, sender_id: int, receiver_id: int, item_id: int) -> dict[str, Any] | None:
+        if not self.connection:
+            raise RuntimeError("Database is not connected")
+        async with self._lock:
+            row = await self._one(
+                "SELECT id, item_name, rarity, float_value, price, image_url FROM inventory "
+                "WHERE id = ? AND user_id = ?",
+                (item_id, sender_id),
+            )
+            if row is None:
+                return None
+            await self.connection.execute(
+                "UPDATE inventory SET user_id = ? WHERE id = ? AND user_id = ?",
+                (receiver_id, item_id, sender_id),
+            )
+            await self.connection.commit()
+            return dict(row)

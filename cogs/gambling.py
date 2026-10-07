@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 
 class BlackjackView(discord.ui.View):
@@ -21,7 +22,7 @@ class BlackjackView(discord.ui.View):
 
     async def interaction_check(self, interaction):
         if interaction.user != self.ctx.author:
-            await interaction.response.send_message("Bu oyun sana ait değil.", ephemeral=True)
+            await interaction.response.send_message("Bu oyun yalnızca ilgili kullanıcı tarafından kullanılabilir.", ephemeral=True)
             return False
         return True
 
@@ -35,7 +36,7 @@ class BlackjackView(discord.ui.View):
         return score
 
     def embed(self, finished=False):
-        result = discord.Embed(title="🎰 Blackjack", color=discord.Color.gold())
+        result = discord.Embed(title="🎰 Blackjack Oyunu", color=discord.Color.gold())
         result.add_field(name=f"{self.ctx.author.name} [{self.score(self.player)}]", value=" | ".join(self.player))
         dealer = " | ".join(self.dealer) if finished else f"{self.dealer[0]} | ❓"
         result.add_field(name=f"Kasa [{self.score(self.dealer) if finished else '?'}]", value=dealer)
@@ -51,7 +52,7 @@ class BlackjackView(discord.ui.View):
                 self.finished = True
                 for child in self.children:
                     child.disabled = True
-                await interaction.response.edit_message(content="💥 Patladın; bahis kaybedildi.", embed=self.embed(True), view=self)
+                await interaction.response.edit_message(content="El değeriniz 21'i aştı. Bahsiniz kaybedildi.", embed=self.embed(True), view=self)
                 self.stop()
             else:
                 await interaction.response.edit_message(embed=self.embed(), view=self)
@@ -69,12 +70,12 @@ class BlackjackView(discord.ui.View):
             player, dealer = self.score(self.player), self.score(self.dealer)
             if dealer > 21 or player > dealer:
                 await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet * 2)
-                text = f"🎉 Kazandın! Bakiye: {(await self.cog.bot.db.get_economy(self.ctx.author.id))['bakiye']}"
+                text = f"Tebrikler, oyunu kazandınız. Güncel bakiyeniz: {(await self.cog.bot.db.get_economy(self.ctx.author.id))['bakiye']} kredi."
             elif player == dealer:
                 await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet)
-                text = "🤝 Berabere; bahsin iade edildi."
+                text = "Oyun berabere tamamlandı. Bahsiniz iade edildi."
             else:
-                text = "💀 Kasa kazandı."
+                text = "Oyun sonucunda kasa kazandı."
             await interaction.response.edit_message(content=text, embed=self.embed(True), view=self)
             self.stop()
 
@@ -100,20 +101,20 @@ class Ekonomi(commands.Cog):
         ok, balance, last = await self.bot.db.claim_salary(ctx.author.id, time.time())
         if not ok:
             remaining = max(0, int(6 * 3600 - (time.time() - last)))
-            return await ctx.send(f"⏳ Maaşına {remaining // 3600} saat {(remaining % 3600) // 60} dakika var.")
-        await ctx.send(f"💸 Maaşın yatırıldı. Bakiye: **{balance}**")
+            return await ctx.send(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
+        await ctx.send(f"Maaş ödemesi hesabınıza yatırıldı. Güncel bakiyeniz: **{balance} kredi**.")
 
     @commands.command(aliases=["cüzdan", "para"])
     async def bakiye(self, ctx):
         if await require_channel(ctx, "game_channel"):
-            await ctx.send(f"💳 Bakiye: **{await self.balance(ctx.author.id)}**")
+            await ctx.send(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
 
     @commands.command(aliases=["bj"])
     async def blackjack(self, ctx, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
-            return await ctx.send("Bu bahis için yeterli bakiyen yok.")
+            return await ctx.send("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         view = BlackjackView(self, ctx, bahis)
         await ctx.send(embed=view.embed(), view=view)
 
@@ -122,15 +123,15 @@ class Ekonomi(commands.Cog):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
         if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
-            return await ctx.send("Bu bahis için yeterli bakiyen yok.")
+            return await ctx.send("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         await asyncio.sleep(1)
         reels = [random.choice(["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣"]) for _ in range(3)]
         multiplier = 10 if len(set(reels)) == 1 else 1.5 if len(set(reels)) == 2 else 0
         winnings = int(bahis * multiplier)
         if winnings:
             await self.bot.db.add_balance(ctx.author.id, winnings)
-        await ctx.send(f"🎰 `[ {' | '.join(reels)} ]` Kazanç: **{winnings}**")
+        await ctx.send(f"🎰 `[ {' | '.join(reels)} ]` Ödülünüz: **{winnings} kredi**.")
 
 
-async def setup(bot):
-    await bot.add_cog(Ekonomi(bot))
+def setup(bot):
+    return add_cog(bot, Ekonomi(bot))

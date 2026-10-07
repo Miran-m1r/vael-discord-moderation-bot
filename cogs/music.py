@@ -3,6 +3,7 @@ from discord.ext import commands
 import yt_dlp
 import asyncio
 from utils.channels import require_channel
+from utils.discord_compat import add_cog
 
 # ====================================================================
 # 1. YOUTUBE VE SES MOTORU AYARLARI (İnce Ayarlar)
@@ -57,7 +58,7 @@ class Muzik(commands.Cog):
     def siradaki_sarkiya_gec(self, ctx, hata=None):
         """Bir şarkı bitince kuyruktaki diğerine otomatik geçen motor"""
         if hata:
-            print(f"Müzik oynatılırken hata çıktı amk: {hata}")
+            print(f"Müzik oynatılırken hata oluştu: {hata}")
 
         sunucu_id = ctx.guild.id
         if sunucu_id in self.kuyruk and len(self.kuyruk[sunucu_id]) > 0:
@@ -72,7 +73,7 @@ class Muzik(commands.Cog):
                 print(f"Sıradaki şarkıya geçerken patladık: {e}")
         else:
             # Kuyruk bittiyse botu ses kanalında boş boş bekletme
-            coroutine = ctx.send("💽 Kuyruk bitti, mekan sessizliğe büründü. Başka parça yoksa birazdan çıkarım.")
+            coroutine = ctx.send("💽 Çalma kuyruğu sona erdi. Yeni bir parça eklenmezse bağlantı sonlandırılacaktır.")
             asyncio.run_coroutine_threadsafe(coroutine, self.bot.loop)
 
     async def sarki_oynat(self, ctx, arama_sorgusu):
@@ -84,11 +85,11 @@ class Muzik(commands.Cog):
             # Şarkı bittiğinde `siradaki_sarkiya_gec` fonksiyonunu tetikliyoruz
             ses_kanali.play(oynatici, after=lambda e: self.siradaki_sarkiya_gec(ctx, e))
 
-            embed = discord.Embed(title="🔊 Parça Koptu Geliyor!", description=f"**{oynatici.title}**",
+            embed = discord.Embed(title="🔊 Çalma Başlatıldı", description=f"**{oynatici.title}**",
                                   color=discord.Color.brand_green())
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(f"Lan şarkıyı açamadım, YouTube bir pürüz çıkardı: {str(e)[:100]}")
+            await ctx.send(f"Parça başlatılamadı. Ayrıntı: {str(e)[:100]}")
             self.siradaki_sarkiya_gec(ctx)  # Hata verirse sıradakine atla
 
     # ====================================================================
@@ -100,7 +101,7 @@ class Muzik(commands.Cog):
         if not await require_channel(ctx, "music_channel"):
             return
         if not ctx.author.voice:
-            return await ctx.send("Lan önce bir ses kanalına gir, boşluğa mı müzik çalacağım?")
+            return await ctx.send("Lütfen önce bir ses kanalına katılınız.")
 
         ses_kanali = ctx.voice_client
 
@@ -109,7 +110,7 @@ class Muzik(commands.Cog):
             await ctx.author.voice.channel.connect()
             ses_kanali = ctx.voice_client
         elif ses_kanali.channel != ctx.author.voice.channel:
-            return await ctx.send("Başka kanalda DJ'lik yapıyorum koçum, yanıma gel.")
+            return await ctx.send("Bot farklı bir ses kanalında bulunmaktadır. Lütfen aynı kanala katılınız.")
 
         sunucu_id = ctx.guild.id
         if sunucu_id not in self.kuyruk:
@@ -119,23 +120,23 @@ class Muzik(commands.Cog):
         if ses_kanali.is_playing() or ses_kanali.is_paused():
             self.kuyruk[sunucu_id].append(arama_sorgusu)
             await ctx.send(
-                f"🎶 Listeye yazıldın. Sıradaki parça: **{arama_sorgusu}** (Sırada {len(self.kuyruk[sunucu_id])} şarkı var).")
+                f"🎶 Parça kuyruğa eklendi: **{arama_sorgusu}**. Kuyrukta {len(self.kuyruk[sunucu_id])} parça bulunmaktadır.")
         else:
             # Bot boş yatıyorsa direkt müziği patlat
-            mesaj = await ctx.send("⏳ Şarkıyı arıyorum, bassları hazırlıyorum...")
+            mesaj = await ctx.send("⏳ Parça aranıyor ve oynatma hazırlanıyor...")
             await self.sarki_oynat(ctx, arama_sorgusu)
             await mesaj.delete()
 
     @commands.command(aliases=['s', 'geç', 'atla'])
     async def skip(self, ctx):
-        """Çalan boku beğenmeyenler için geçme komutu"""
+        """Mevcut parçayı atlama komutu."""
         if not await require_channel(ctx, "music_channel"):
             return
         ses_kanali = ctx.voice_client
         if not ses_kanali or not ses_kanali.is_playing():
-            return await ctx.send("Ortada çalan bir şey yok ki neyi geçeyim amk?")
+            return await ctx.send("Şu anda atlanabilecek bir parça bulunmamaktadır.")
 
-        await ctx.send("⏭️ Parça sarmadı galiba, sıradakine geçiyorum...")
+        await ctx.send("⏭️ Mevcut parça atlanıyor; sıradaki parçaya geçiliyor.")
         ses_kanali.stop()  # Stop dediğimiz an otomatik olarak `after` callback'i çalışır ve sıradaki çalar.
 
     @commands.command(aliases=['q', 'sıra', 'liste'])
@@ -145,13 +146,13 @@ class Muzik(commands.Cog):
             return
         sunucu_id = ctx.guild.id
         if sunucu_id not in self.kuyruk or not self.kuyruk[sunucu_id]:
-            return await ctx.send("Kuyruk sinek avlıyor, bomboş.")
+            return await ctx.send("Çalma kuyruğu boş durumdadır.")
 
         liste = "\n".join([f"{i + 1}. {sarki}" for i, sarki in enumerate(self.kuyruk[sunucu_id][:10])])
 
-        embed = discord.Embed(title="📜 Mekanın Çalma Listesi", description=liste, color=discord.Color.dark_purple())
+        embed = discord.Embed(title="📜 Çalma Listesi", description=liste, color=discord.Color.dark_purple())
         if len(self.kuyruk[sunucu_id]) > 10:
-            embed.set_footer(text=f"...ve {len(self.kuyruk[sunucu_id]) - 10} şarkı daha var amk.")
+            embed.set_footer(text=f"...ve {len(self.kuyruk[sunucu_id]) - 10} parça daha bulunmaktadır.")
 
         await ctx.send(embed=embed)
 
@@ -164,10 +165,10 @@ class Muzik(commands.Cog):
         if ses_kanali:
             self.kuyruk[ctx.guild.id] = []  # Kuyruğu çöpe at
             await ses_kanali.disconnect()
-            await ctx.send("🔌 Fişi çektim, hadi eyvallah.")
+            await ctx.send("🔌 Ses bağlantısı sonlandırıldı.")
         else:
-            await ctx.send("Zaten kanalda değilim, neyin tribindesin amk?")
+            await ctx.send("Bot şu anda herhangi bir ses kanalında bulunmamaktadır.")
 
 
-async def setup(bot):
-    await bot.add_cog(Muzik(bot))
+def setup(bot):
+    return add_cog(bot, Muzik(bot))
