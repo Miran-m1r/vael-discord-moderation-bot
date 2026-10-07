@@ -162,30 +162,41 @@ class Cases(commands.Cog):
 
     @discord.slash_command(name="buycase", description="Kasa satın alır ve açar.")
     async def buycase(self, ctx: discord.ApplicationContext, kasa_adi: str):
+        # 3 saniye sınırına takılmamak için Discord'a "bekle" sinyali çakıyoruz
         await ctx.defer()
+
         if not await require_channel(ctx, "game_channel"):
             return
+
         key = kasa_adi.casefold().replace(" ", "")
         case = CASES.get(key)
         if case is None:
-            await ctx.respond("Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
+            await ctx.respond(
+                "Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
             return
+
         if not await self.bot.db.try_withdraw(ctx.author.id, case.price):
             await ctx.respond("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
             return
+
         opening = discord.Embed(
             title="🎁 Kasa Açılıyor...",
             description=f"**{case.name}** açılıyor. Lütfen bekleyiniz...",
             color=discord.Color.orange(),
         )
         opening.set_image(url=OPENING_GIF_URL)
-        msg = await ctx.respond(embed=opening)
+
+        # Animasyonu yansıt
+        await ctx.respond(embed=opening)
+
         await asyncio.sleep(3)
+
         item_name, wear, rarity, float_value, price, market_url = create_drop(case)
         image_url = await resolve_steam_image_url(market_url)
         item_id = await self.bot.db.add_inventory_item(
             ctx.author.id, item_name, rarity, float_value, price, image_url
         )
+
         result = discord.Embed(
             title="🎉 Kasa Açıldı",
             description=(
@@ -207,8 +218,9 @@ class Cases(commands.Cog):
                 value=f"[Eşya listelemesini görüntüle]({market_url})",
                 inline=False,
             )
-        # Pycord updates the deferred interaction through the application context.
-        await msg.edit(embed=result)
+
+        # Pycord'da defer edilmiş orijinal mesaj sadece bu komutla hatasız güncellenir
+        await ctx.interaction.edit_original_response(embed=result)
 
     @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
     async def inventory(self, ctx: discord.ApplicationContext):
