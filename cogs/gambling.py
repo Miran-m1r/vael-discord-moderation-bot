@@ -94,7 +94,7 @@ class Ekonomi(commands.Cog):
     async def balance(self, user_id):
         return int((await self.bot.db.get_economy(user_id))["bakiye"])
 
-    @commands.command()
+    @commands.hybrid_command()
     async def maaş(self, ctx):
         if not await require_channel(ctx, "game_channel"):
             return
@@ -104,12 +104,12 @@ class Ekonomi(commands.Cog):
             return await ctx.send(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
         await ctx.send(f"Maaş ödemesi hesabınıza yatırıldı. Güncel bakiyeniz: **{balance} kredi**.")
 
-    @commands.command(aliases=["cüzdan", "para"])
+    @commands.hybrid_command(aliases=["cüzdan", "para"])
     async def bakiye(self, ctx):
         if await require_channel(ctx, "game_channel"):
             await ctx.send(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
 
-    @commands.command(aliases=["bj"])
+    @commands.hybrid_command(aliases=["bj"])
     async def blackjack(self, ctx, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
@@ -118,7 +118,7 @@ class Ekonomi(commands.Cog):
         view = BlackjackView(self, ctx, bahis)
         await ctx.send(embed=view.embed(), view=view)
 
-    @commands.command(aliases=["slots", "kumar"])
+    @commands.hybrid_command(aliases=["slots", "kumar"])
     async def slot(self, ctx, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return

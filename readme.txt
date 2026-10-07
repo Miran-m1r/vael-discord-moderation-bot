@@ -6,7 +6,7 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
 
 ## 🚀 Öne Çıkan Özellikler
 * **Asenkron Veritabanı (`aiosqlite`)**: Ekonomi, seviye ve sunucu ayarları kalıcı olarak SQLite veritabanında saklanır[cite: 3].
-* **Dinamik Kanal Yönetimi**: Sabit ID devri bitti; `!kurulum` komutu ile log, oyun, müzik, sohbet ve admin kanalları sunucuya özel olarak atanır[cite: 3].
+* **Dinamik Kanal Yönetimi**: Sabit ID devri bitti; `!kurulum` komutu ile log, oyun, müzik, sohbet, admin ve ticket paneli kanalları sunucuya özel olarak atanır[cite: 3].
 * **LLM Destekli Sohbet & Destek**: Kullanıcıların kişisel hafızasını tutan yapay zeka chatbotu ve ticket sisteminde otomatik çözüm üreten yapay zeka asistanı[cite: 3].
 * **Kapsamlı Moderasyon & Anti-Nuke**: Otomatik küfür/reklam filtresi, sosyal kredi sistemi, ghost-ping avcısı ve sunucu patlatma (nuke) koruması[cite: 3].
 * **Kumarhane & Satranç**: Gerçek zamanlı bahisli Blackjack, Slot makineleri ve Chess.com entegreli dinamik satranç tahtası[cite: 3].
@@ -16,6 +16,12 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
 ---
 
 ## 🕹️ Komut Rehberi ve Kullanım
+
+### 0. Yardım
+* **`!help`** (Alternatif: `!yardım`)
+  * *Açıklama*: Botun tüm komutlarını, kullanım şekillerini ve gerekli kanal/rol bilgilerini gösterir.
+* **`!help <komut>`**
+  * *Açıklama*: Tek bir komutun kullanımını, erişim kuralını ve kısayollarını gösterir.
 
 ### 1. Kurulum Komutları (Admin)
 * **`!kurulum`**
@@ -69,7 +75,7 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
 * **`!ban @Üye [sebep]`**
   * *Açıklama*: Sunucunun huzurunu kaçıranı kalıcı olarak siktir eder[cite: 3].
 * **`!ticket_kur`**
-  * *Açıklama*: Kanala yapay zeka destekli destek talebi açma panelini kurar[cite: 3].
+  * *Açıklama*: `!kurulum` sırasında seçilen ticket paneli kanalına yapay zeka destekli destek talebi açma panelini kurar[cite: 3].
 * **`!backup_al`**
   * *Açıklama*: Sunucunun iskeletini (roller, kanallar, kategoriler) anlık olarak yedekler[cite: 3].
 * **`!backup_yukle`**
@@ -85,3 +91,18 @@ MekanBot; sokak ağzıyla konuşan, yapay zeka (LLM) destekli, asenkron SQLite v
 1. Gerekli kütüphaneleri yükle:
    ```bash
    pip install -r requirements.txt
+   ```
+
+2. `.env` dosyasına bot tokenini, yönetici rolünü ve yerel HTTP proxy ayarını ekleyin:
+   ```env
+   DISCORD_TOKEN=bot_tokeniniz
+   ADMIN_ROLE_ID=yonetici_rol_id
+   DISCORD_PROXY=http://127.0.0.1:8080
+   ```
+   `DISCORD_PROXY` ayarı Discord REST API ve gateway WebSocket bağlantılarında
+   `aiohttp` üzerinden kullanılır. Değeri belirtilmezse
+   `http://127.0.0.1:8080` varsayılanı kullanılır. Proxy kullanılması ağ
+   gecikmesini sıfırlamaz; ek bir proxy katmanı gecikmeyi artırabilir.
+   `ADMIN_ROLE_ID` yalnızca yönetim, moderasyon, kurulum, ticket paneli ve yedekleme komutlarını
+   kullanabilecek roldür. Ticket açmak için bu role gerek yoktur; herkes ticket açabilir.
+   İsterseniz ticket kanallarında ayrıca `MOD_ROLE_ID=moderator_rol_id` tanımlayabilirsiniz.

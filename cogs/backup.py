@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands, tasks
+from utils.channels import admin_role_only
 import json
 import os
 import datetime
@@ -74,8 +75,8 @@ class Backup(commands.Cog):
     # ====================================================================
     # 3. MANUEL YEDEK ALMA (Ne olur ne olmaz komutu)
     # ====================================================================
-    @commands.command()
-    @commands.has_permissions(administrator=True)
+    @commands.hybrid_command()
+    @admin_role_only()
     async def backup_al(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:
@@ -87,8 +88,8 @@ class Backup(commands.Cog):
     # ====================================================================
     # 4. KIYAMET PROTOKOLÜ (Nuke yiyen sunucuyu baştan inşa etme)
     # ====================================================================
-    @commands.command()
-    @commands.has_permissions(administrator=True)
+    @commands.hybrid_command()
+    @admin_role_only()
     async def backup_yukle(self, ctx):
         settings = await self.bot.db.get_settings(ctx.guild.id)
         if not settings or settings.get("admin_channel") != ctx.channel.id:

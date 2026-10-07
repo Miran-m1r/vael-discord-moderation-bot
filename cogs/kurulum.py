@@ -17,6 +17,7 @@ class Kurulum(commands.Cog):
             ("log_channel", "Log Kanalı"), ("game_channel", "Kumar / Oyun Kanalı"),
             ("music_channel", "Müzik Kanalı"), ("chat_channel", "Bot Sohbet Kanalı"),
             ("admin_channel", "Bot Komut (Sadece Adminler İçin) Kanalı"),
+            ("ticket_channel", "Ticket Paneli Kanalı"),
         ]
         ids = {}
         await ctx.send("Kurulum başlatıldı. Lütfen her soru için kanal ID'sini veya kanal etiketini 60 saniye içinde gönderiniz.")

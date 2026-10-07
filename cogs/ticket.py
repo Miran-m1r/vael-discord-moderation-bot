@@ -2,11 +2,24 @@ import discord
 from discord.ext import commands
 import io
 import os
+import asyncio
 from dotenv import load_dotenv,find_dotenv
 from openai import AsyncOpenAI
+from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
 load_dotenv(find_dotenv())
+
+
+def _env_role_id(*names: str) -> int:
+    for name in names:
+        try:
+            value = int(os.getenv(name, "0") or 0)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return 0
 
 
 # ====================================================================
@@ -54,6 +67,20 @@ class TicketİciView(discord.ui.View):
     # --- TİCKET KAPATMA VE AI ÖZETLEME ---
     @discord.ui.button(label="🔒 Talebi Kapat", style=discord.ButtonStyle.danger, custom_id="ticket_kapat_buton")
     async def kapat(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not isinstance(interaction.user, discord.Member):
+            return await interaction.response.send_message(
+                "Bu işlem yalnızca sunucu içinde yapılabilir.", ephemeral=True
+            )
+        is_staff = any(
+            interaction.user.get_role(role_id)
+            for role_id in (self.cog.mod_rol_id, self.cog.admin_rol_id)
+            if role_id
+        )
+        owner_id = interaction.channel.topic.removeprefix("ticket_owner:") if interaction.channel.topic else ""
+        if not is_staff and owner_id != str(interaction.user.id):
+            return await interaction.response.send_message(
+                "Bu ticket'ı yalnızca ticket sahibi veya yetkili ekip kapatabilir.", ephemeral=True
+            )
         await interaction.response.send_message("⏳ Kanal 10 saniye içinde arşivlenecek. Görüşme özeti hazırlanıyor...",
                                                 ephemeral=True)
 
@@ -107,22 +134,50 @@ class TicketAcView(discord.ui.View):
     @discord.ui.button(label="🎫 Destek Talebi Aç", style=discord.ButtonStyle.primary, custom_id="ticket_ac_buton")
     async def ac(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
-        mod_rol = guild.get_role(self.cog.mod_rol_id)
+        if guild is None:
+            return await interaction.response.send_message(
+                "Ticket yalnızca sunucularda açılabilir.", ephemeral=True
+            )
+        async with self.cog.ticket_lock:
+            existing = next(
+                (
+                    channel for channel in guild.text_channels
+                    if channel.name.startswith("ticket-")
+                    and channel.topic == f"ticket_owner:{interaction.user.id}"
+                ),
+                None,
+            )
+            if existing:
+                return await interaction.response.send_message(
+                    f"Zaten açık bir ticket'ınız bulunmaktadır: {existing.mention}", ephemeral=True
+                )
+            suanki_sayi = self.cog.ticket_sayaci
+            kanal_adi = f"ticket-{suanki_sayi}"
+            while discord.utils.get(guild.text_channels, name=kanal_adi):
+                suanki_sayi += 1
+                kanal_adi = f"ticket-{suanki_sayi}"
+            self.cog.ticket_sayaci = suanki_sayi + 1
 
-        suanki_sayi = self.cog.ticket_sayaci
-        kanal_adi = f"ticket-{suanki_sayi}"
-        self.cog.ticket_sayaci += 1
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
-        }
-        if mod_rol:
-            overwrites[mod_rol] = discord.PermissionOverwrite(read_messages=True, send_messages=True,
-                                                              manage_messages=True)
-
-        yeni_kanal = await guild.create_text_channel(kanal_adi, overwrites=overwrites,
-                                                     category=interaction.channel.category)
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(
+                    read_messages=True, send_messages=True, attach_files=True
+                ),
+            }
+            for role_id in (self.cog.mod_rol_id, self.cog.admin_rol_id):
+                role = guild.get_role(role_id) if role_id else None
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        read_messages=True, send_messages=True, manage_messages=True
+                    )
+            settings = await self.cog.bot.db.get_settings(guild.id)
+            ticket_channel_id = settings.get("ticket_channel") if settings else None
+            ticket_channel = guild.get_channel(ticket_channel_id) if ticket_channel_id else None
+            category = ticket_channel.category if isinstance(ticket_channel, discord.TextChannel) else interaction.channel.category
+            yeni_kanal = await guild.create_text_channel(
+                kanal_adi, overwrites=overwrites, category=category,
+                topic=f"ticket_owner:{interaction.user.id}",
+            )
 
         await interaction.response.send_message(f"✅ Destek talebiniz oluşturuldu: {yeni_kanal.mention}", ephemeral=True)
 
@@ -142,8 +197,9 @@ class Ticket(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ticket_sayaci = 0
-
-        self.mod_rol_id = int(os.getenv("MOD_ROL_ID", 0))
+        self.mod_rol_id = _env_role_id("MOD_ROLE_ID", "MOD_ROL_ID")
+        self.admin_rol_id = _env_role_id("ADMIN_ROLE_ID")
+        self.ticket_lock = asyncio.Lock()
 
 
         api_key = os.getenv("OPENAI_API_KEY")
@@ -158,15 +214,20 @@ class Ticket(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def ticket_kur(self, ctx):
+        if not await require_channel(ctx, "admin_channel"):
+            return
         settings = await self.bot.db.get_settings(ctx.guild.id)
-        if not settings or settings.get("admin_channel") != ctx.channel.id:
-            return await ctx.send("Bu komut yalnızca kurulumdaki admin kanalında kullanılabilir.")
+        ticket_channel_id = settings.get("ticket_channel") if settings else None
+        ticket_channel = ctx.guild.get_channel(ticket_channel_id) if ticket_channel_id else None
+        if not isinstance(ticket_channel, discord.TextChannel):
+            return await ctx.send("Önce `!kurulum` ile geçerli bir ticket paneli kanalı seçilmelidir.")
         embed = discord.Embed(
             title="🎫 Mekan Destek Merkezi",
             description="Destek talebi oluşturmak için aşağıdaki düğmeyi kullanınız. Destek ekibimiz ve yapay zekâ asistanımız size yardımcı olacaktır.",
             color=discord.Color.blurple()
         )
-        await ctx.send(embed=embed, view=TicketAcView(self))
+        await ticket_channel.send(embed=embed, view=TicketAcView(self))
+        await ctx.send(f"✅ Ticket paneli {ticket_channel.mention} kanalına gönderildi.")
 
 
 def setup(bot):

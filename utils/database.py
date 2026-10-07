@@ -32,7 +32,8 @@ class Database:
         );
         CREATE TABLE IF NOT EXISTS sunucu_ayarlari (
             guild_id INTEGER PRIMARY KEY, log_channel INTEGER, game_channel INTEGER,
-            music_channel INTEGER, chat_channel INTEGER, admin_channel INTEGER
+            music_channel INTEGER, chat_channel INTEGER, admin_channel INTEGER,
+            ticket_channel INTEGER
         );
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,10 +45,12 @@ class Database:
             image_url TEXT
         );
         """)
-        try:
-            await self.connection.execute("ALTER TABLE inventory ADD COLUMN image_url TEXT")
-        except aiosqlite.OperationalError:
-            pass
+        async with self.connection.execute("PRAGMA table_info(sunucu_ayarlari)") as cursor:
+            columns = await cursor.fetchall()
+        if not any(column["name"] == "ticket_channel" for column in columns):
+            await self.connection.execute(
+                "ALTER TABLE sunucu_ayarlari ADD COLUMN ticket_channel INTEGER"
+            )
         await self.connection.commit()
 
     async def close(self) -> None:
@@ -63,12 +66,16 @@ class Database:
 
     async def get_settings(self, guild_id: int) -> dict[str, int | None] | None:
         row = await self._one(
-            "SELECT log_channel, game_channel, music_channel, chat_channel, admin_channel "
+            "SELECT log_channel, game_channel, music_channel, chat_channel, admin_channel, "
+            "ticket_channel "
             "FROM sunucu_ayarlari WHERE guild_id = ?", (guild_id,))
         return dict(row) if row else None
 
     async def save_settings(self, guild_id: int, **channels: int | None) -> None:
-        allowed = {"log_channel", "game_channel", "music_channel", "chat_channel", "admin_channel"}
+        allowed = {
+            "log_channel", "game_channel", "music_channel", "chat_channel",
+            "admin_channel", "ticket_channel",
+        }
         if set(channels) - allowed:
             raise ValueError("Unknown server setting")
         values = {key: channels.get(key) for key in allowed}
@@ -77,14 +84,15 @@ class Database:
         async with self._lock:
             await self.connection.execute(
                 """INSERT INTO sunucu_ayarlari
-                (guild_id, log_channel, game_channel, music_channel, chat_channel, admin_channel)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (guild_id, log_channel, game_channel, music_channel, chat_channel, admin_channel,
+                 ticket_channel)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(guild_id) DO UPDATE SET
                 log_channel=excluded.log_channel, game_channel=excluded.game_channel,
                 music_channel=excluded.music_channel, chat_channel=excluded.chat_channel,
-                admin_channel=excluded.admin_channel""",
+                admin_channel=excluded.admin_channel, ticket_channel=excluded.ticket_channel""",
                 (guild_id, values["log_channel"], values["game_channel"], values["music_channel"],
-                 values["chat_channel"], values["admin_channel"]))
+                 values["chat_channel"], values["admin_channel"], values["ticket_channel"]))
             await self.connection.commit()
 
     async def get_economy(self, user_id: int) -> dict[str, int | float]:

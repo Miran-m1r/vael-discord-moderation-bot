@@ -31,7 +31,7 @@ class Seviye(commands.Cog):
             if role:
                 await message.author.add_roles(role)
 
-    @commands.command(aliases=["rank", "rütbe", "level", "lvl"])
+    @commands.hybrid_command(aliases=["rank", "rütbe", "level", "lvl"])
     async def seviye(self, ctx, uye: discord.Member = None):
         if not await require_channel(ctx, "chat_channel"):
             return
