@@ -43,7 +43,7 @@ class BlackjackView(discord.ui.View):
         return result
 
     @discord.ui.button(label="Kart Çek", style=discord.ButtonStyle.primary)
-    async def hit(self, interaction, button):
+    async def hit(self, button: discord.ui.Button, interaction: discord.Interaction):
         async with self.state_lock:
             if self.finished:
                 return
@@ -58,7 +58,7 @@ class BlackjackView(discord.ui.View):
                 await interaction.response.edit_message(embed=self.embed(), view=self)
 
     @discord.ui.button(label="Bekle", style=discord.ButtonStyle.danger)
-    async def stand(self, interaction, button):
+    async def stand(self, button: discord.ui.Button, interaction: discord.Interaction):
         async with self.state_lock:
             if self.finished:
                 return
@@ -69,10 +69,10 @@ class BlackjackView(discord.ui.View):
                 self.dealer.append(self.deck.pop())
             player, dealer = self.score(self.player), self.score(self.dealer)
             if dealer > 21 or player > dealer:
-                await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet * 2)
-                text = f"Tebrikler, oyunu kazandınız. Güncel bakiyeniz: {(await self.cog.bot.db.get_economy(self.ctx.author.id))['bakiye']} kredi."
+                await self.cog.bot.db.add_balance(self.ctx.guild.id, self.ctx.author.id, self.bet * 2)
+                text = f"Tebrikler, oyunu kazandınız. Güncel bakiyeniz: {(await self.cog.bot.db.get_economy(self.ctx.guild.id, self.ctx.author.id))['bakiye']} kredi."
             elif player == dealer:
-                await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet)
+                await self.cog.bot.db.add_balance(self.ctx.guild.id, self.ctx.author.id, self.bet)
                 text = "Oyun berabere tamamlandı. Bahsiniz iade edildi."
             else:
                 text = "Oyun sonucunda kasa kazandı."
@@ -84,21 +84,21 @@ class BlackjackView(discord.ui.View):
             if self.finished:
                 return
             self.finished = True
-            await self.cog.bot.db.add_balance(self.ctx.author.id, self.bet)
+            await self.cog.bot.db.add_balance(self.ctx.guild.id, self.ctx.author.id, self.bet)
 
 
 class Ekonomi(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def balance(self, user_id):
-        return int((await self.bot.db.get_economy(user_id))["bakiye"])
+    async def balance(self, guild_id: int, user_id: int):
+        return int((await self.bot.db.get_economy(guild_id, user_id))["bakiye"])
 
     @discord.slash_command(name="maas", description="Periyodik maaş ödemenizi almanızı sağlar.")
     async def maaş(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
-        ok, balance, last = await self.bot.db.claim_salary(ctx.author.id, time.time())
+        ok, balance, last = await self.bot.db.claim_salary(ctx.guild.id, ctx.author.id, time.time())
         if not ok:
             remaining = max(0, int(6 * 3600 - (time.time() - last)))
             return await ctx.respond(f"Maaş ödemesi için {remaining // 3600} saat {(remaining % 3600) // 60} dakika beklemeniz gerekmektedir.")
@@ -107,13 +107,13 @@ class Ekonomi(commands.Cog):
     @discord.slash_command(name="bakiye", description="Güncel kredi bakiyenizi görüntüler.")
     async def bakiye(self, ctx: discord.ApplicationContext):
         if await require_channel(ctx, "game_channel"):
-            await ctx.respond(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.author.id)} kredi**.")
+            await ctx.respond(f"💳 Güncel bakiyeniz: **{await self.balance(ctx.guild.id, ctx.author.id)} kredi**.")
 
     @discord.slash_command(name="blackjack", description="Belirlediğiniz kredi bahsiyle blackjack oynar.")
     async def blackjack(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
-        if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
+        if not await self.bot.db.try_withdraw(ctx.guild.id, ctx.author.id, bahis):
             return await ctx.respond("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         view = BlackjackView(self, ctx, bahis)
         await ctx.respond(embed=view.embed(), view=view)
@@ -122,14 +122,14 @@ class Ekonomi(commands.Cog):
     async def slot(self, ctx: discord.ApplicationContext, bahis: int):
         if not await require_channel(ctx, "game_channel") or bahis <= 0:
             return
-        if not await self.bot.db.try_withdraw(ctx.author.id, bahis):
+        if not await self.bot.db.try_withdraw(ctx.guild.id, ctx.author.id, bahis):
             return await ctx.respond("Bu bahis için yeterli bakiyeniz bulunmamaktadır.")
         await asyncio.sleep(1)
         reels = [random.choice(["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣"]) for _ in range(3)]
         multiplier = 10 if len(set(reels)) == 1 else 1.5 if len(set(reels)) == 2 else 0
         winnings = int(bahis * multiplier)
         if winnings:
-            await self.bot.db.add_balance(ctx.author.id, winnings)
+            await self.bot.db.add_balance(ctx.guild.id, ctx.author.id, winnings)
         await ctx.respond(f"🎰 `[ {' | '.join(reels)} ]` Ödülünüz: **{winnings} kredi**.")
 
 

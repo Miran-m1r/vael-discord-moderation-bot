@@ -3,24 +3,13 @@ from discord.ext import commands
 import io
 import os
 import asyncio
-from dotenv import load_dotenv,find_dotenv
+from dotenv import load_dotenv, find_dotenv
 from openai import AsyncOpenAI
 from utils.channels import require_channel
 from utils.discord_compat import add_cog
 from utils.privacy import external_ai_enabled, redact_sensitive_text
 
 load_dotenv(find_dotenv())
-
-
-def _env_role_id(*names: str) -> int:
-    for name in names:
-        try:
-            value = int(os.getenv(name, "0") or 0)
-        except ValueError:
-            continue
-        if value > 0:
-            return value
-    return 0
 
 
 # ====================================================================
@@ -33,7 +22,7 @@ class TicketİciView(discord.ui.View):
 
     # --- TIER-1 AI DESTEK AJANI ---
     @discord.ui.button(label="🤖 Yapay Zekaya Sor", style=discord.ButtonStyle.success, custom_id="ai_destek_buton")
-    async def ai_destek(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def ai_destek(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.response.send_message("🧠 *Görüşme geçmişi inceleniyor ve çözüm hazırlanıyor. Lütfen bekleyiniz...*",
                                                 ephemeral=False)
 
@@ -71,14 +60,17 @@ class TicketİciView(discord.ui.View):
 
     # --- TİCKET KAPATMA VE AI ÖZETLEME ---
     @discord.ui.button(label="🔒 Talebi Kapat", style=discord.ButtonStyle.danger, custom_id="ticket_kapat_buton")
-    async def kapat(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def kapat(self, button: discord.ui.Button, interaction: discord.Interaction):
         if not isinstance(interaction.user, discord.Member):
             return await interaction.response.send_message(
                 "Bu işlem yalnızca sunucu içinde yapılabilir.", ephemeral=True
             )
+        settings = await self.cog.bot.db.get_settings(interaction.guild.id)
+        mod_role_id = settings.get("mod_role") if settings else None
+        admin_role_id = settings.get("admin_role") if settings else None
         is_staff = any(
             interaction.user.get_role(role_id)
-            for role_id in (self.cog.mod_rol_id, self.cog.admin_rol_id)
+            for role_id in (mod_role_id, admin_role_id)
             if role_id
         )
         owner_id = interaction.channel.topic.removeprefix("ticket_owner:") if interaction.channel.topic else ""
@@ -117,13 +109,13 @@ class TicketİciView(discord.ui.View):
         discord_dosya = discord.File(fp=dosya_byte, filename=f"{interaction.channel.name}-log.txt")
 
         # Şekilli Log ve AI Özeti
-        settings = await self.cog.bot.db.get_settings(interaction.guild.id)
-        log_kanali = interaction.guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
+        log_channel_id = settings.get("log_channel") if settings else None
+        log_kanali = interaction.guild.get_channel(log_channel_id) if log_channel_id else None
         if log_kanali:
             embed = discord.Embed(title="📁 Ticket Arşivlendi", color=discord.Color.red())
             embed.add_field(name="Kapanan Kanal:", value=interaction.channel.name, inline=True)
             embed.add_field(name="Kapatan Yetkili:", value=interaction.user.name, inline=True)
-            embed.add_field(name="🤖 AI Özeti:", value=f"*{ai_ozet}*", inline=False)  # KRİTİK NOKTA BURASI
+            embed.add_field(name="🤖 AI Özeti:", value=f"*{ai_ozet}*", inline=False)
             await log_kanali.send(embed=embed, file=discord_dosya)
 
         await interaction.channel.delete()
@@ -138,7 +130,7 @@ class TicketAcView(discord.ui.View):
         self.cog = cog
 
     @discord.ui.button(label="🎫 Destek Talebi Aç", style=discord.ButtonStyle.primary, custom_id="ticket_ac_buton")
-    async def ac(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def ac(self, button: discord.ui.Button, interaction: discord.Interaction):
         guild = interaction.guild
         if guild is None:
             return await interaction.response.send_message(
@@ -164,19 +156,22 @@ class TicketAcView(discord.ui.View):
                 kanal_adi = f"ticket-{suanki_sayi}"
             self.cog.ticket_sayaci = suanki_sayi + 1
 
+            settings = await self.cog.bot.db.get_settings(guild.id)
+            mod_role_id = settings.get("mod_role") if settings else None
+            admin_role_id = settings.get("admin_role") if settings else None
+
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 interaction.user: discord.PermissionOverwrite(
                     read_messages=True, send_messages=True, attach_files=True
                 ),
             }
-            for role_id in (self.cog.mod_rol_id, self.cog.admin_rol_id):
+            for role_id in (mod_role_id, admin_role_id):
                 role = guild.get_role(role_id) if role_id else None
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
                         read_messages=True, send_messages=True, manage_messages=True
                     )
-            settings = await self.cog.bot.db.get_settings(guild.id)
             ticket_channel_id = settings.get("ticket_channel") if settings else None
             ticket_channel = guild.get_channel(ticket_channel_id) if ticket_channel_id else None
             category = ticket_channel.category if isinstance(ticket_channel, discord.TextChannel) else interaction.channel.category
@@ -203,10 +198,7 @@ class Ticket(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ticket_sayaci = 0
-        self.mod_rol_id = _env_role_id("MOD_ROLE_ID", "MOD_ROL_ID")
-        self.admin_rol_id = _env_role_id("ADMIN_ROLE_ID")
         self.ticket_lock = asyncio.Lock()
-
 
         api_key = os.getenv("OPENAI_API_KEY")
         self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None

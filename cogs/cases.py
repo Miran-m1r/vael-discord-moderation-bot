@@ -97,11 +97,12 @@ class TradeView(discord.ui.View):
         return True
 
     @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def accept(self, button: discord.ui.Button, interaction: discord.Interaction):
         if self.done:
             return
         self.done = True
-        item = await self.cog.bot.db.transfer_inventory_item(self.sender.id, self.receiver.id, self.item_id)
+        guild_id = interaction.guild.id if interaction.guild else self.sender.guild.id
+        item = await self.cog.bot.db.transfer_inventory_item(guild_id, self.sender.id, self.receiver.id, self.item_id)
         if item is None:
             await interaction.response.edit_message(content="Eşya bulunamadı veya daha önce transfer edilmiştir.",
                                                     view=None)
@@ -109,22 +110,22 @@ class TradeView(discord.ui.View):
         await interaction.response.edit_message(content="Takas başarıyla tamamlandı.", view=None)
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
-    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def decline(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.done = True
         await interaction.response.edit_message(content="Takas teklifi reddedildi.", view=None)
         self.stop()
 
 
 class InventoryView(discord.ui.View):
-    def __init__(self, cog: "Cases", user_id: int, page: int, total: int):
+    def __init__(self, cog: "Cases", guild_id: int, user_id: int, page: int, total: int):
         super().__init__(timeout=180)
-        self.cog, self.user_id, self.page, self.total = cog, user_id, page, total
+        self.cog, self.guild_id, self.user_id, self.page, self.total = cog, guild_id, user_id, page, total
         self.page_size = 10
         self.previous.disabled = page == 0
         self.next.disabled = (page + 1) * self.page_size >= total
 
     async def render(self, interaction: discord.Interaction):
-        items = await self.cog.bot.db.list_inventory(self.user_id, self.page_size, self.page * self.page_size)
+        items = await self.cog.bot.db.list_inventory(self.guild_id, self.user_id, self.page_size, self.page * self.page_size)
 
         embed = discord.Embed(title="🎒 Envanterin", color=discord.Color.blurple())
         if not items:
@@ -143,14 +144,14 @@ class InventoryView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="⬅️ Önceki", style=discord.ButtonStyle.secondary)
-    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def previous(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.page -= 1
         self.previous.disabled = self.page == 0
         self.next.disabled = False
         await self.render(interaction)
 
     @discord.ui.button(label="Sonraki ➡️", style=discord.ButtonStyle.secondary)
-    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def next(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.page += 1
         self.previous.disabled = False
         self.next.disabled = (self.page + 1) * self.page_size >= self.total
@@ -196,7 +197,7 @@ class Cases(commands.Cog):
                     "Belirtilen kasa bulunamadı. Kullanılabilir kasaları `/cases` komutuyla görüntüleyebilirsiniz.")
                 return
 
-            if not await self.bot.db.try_withdraw(ctx.author.id, case.price):
+            if not await self.bot.db.try_withdraw(ctx.guild.id, ctx.author.id, case.price):
                 await ctx.respond("Bakiyeniz bu kasayı satın almak için yeterli değildir.")
                 return
 
@@ -214,7 +215,7 @@ class Cases(commands.Cog):
             item_name, wear, rarity, float_value, price, market_url = create_drop(case)
             image_url = await resolve_steam_image_url(market_url)
             item_id = await self.bot.db.add_inventory_item(
-                ctx.author.id, item_name, rarity, float_value, price, image_url
+                ctx.guild.id, ctx.author.id, item_name, rarity, float_value, price, image_url
             )
 
             result = discord.Embed(
@@ -242,16 +243,16 @@ class Cases(commands.Cog):
             await ctx.interaction.edit_original_response(embed=result)
 
         except Exception as e:
-            await ctx.channel.send(f"🚨 **KOD PATLADI AMK:** `{str(e)}`")
+            await ctx.channel.send(f"🚨 **HATA OLUŞTU:** `{str(e)}`")
             print(f"Kasa açma hatası: {e}")
 
     @discord.slash_command(name="inventory", description="Envanterinizi sayfalı olarak görüntüler.")
     async def inventory(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
-        total = await self.bot.db.count_inventory(ctx.author.id)
-        view = InventoryView(self, ctx.author.id, 0, total)
-        items = await self.bot.db.list_inventory(ctx.author.id, 10, 0)
+        total = await self.bot.db.count_inventory(ctx.guild.id, ctx.author.id)
+        view = InventoryView(self, ctx.guild.id, ctx.author.id, 0, total)
+        items = await self.bot.db.list_inventory(ctx.guild.id, ctx.author.id, 10, 0)
 
         embed = discord.Embed(title="🎒 Envanterin", color=discord.Color.blurple())
         if not items:
@@ -273,7 +274,7 @@ class Cases(commands.Cog):
     async def sell(self, ctx: discord.ApplicationContext, item_id: int):
         if not await require_channel(ctx, "game_channel"):
             return
-        price = await self.bot.db.sell_inventory_item(ctx.author.id, item_id)
+        price = await self.bot.db.sell_inventory_item(ctx.guild.id, ctx.author.id, item_id)
         if price is None:
             await ctx.respond("Belirtilen eşya size ait değil veya mevcut değil.")
             return
@@ -286,7 +287,7 @@ class Cases(commands.Cog):
         if kullanici == ctx.author or kullanici.bot:
             await ctx.respond("Geçerli bir kullanıcı belirtiniz.")
             return
-        if not await self.bot.db.owns_inventory_item(ctx.author.id, item_id):
+        if not await self.bot.db.owns_inventory_item(ctx.guild.id, ctx.author.id, item_id):
             await ctx.respond("Belirtilen eşya size ait değil veya mevcut değil.")
             return
         embed = discord.Embed(

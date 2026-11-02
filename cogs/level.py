@@ -21,8 +21,8 @@ class Seviye(commands.Cog):
     async def on_message(self, message):
         if message.author.bot or message.content.startswith("!") or not message.guild:
             return
-        before = await self.bot.db.get_level(message.author.id)
-        data = await self.bot.db.add_xp(message.author.id, random.randint(15, 25), time.time())
+        before = await self.bot.db.get_level(message.guild.id, message.author.id)
+        data = await self.bot.db.add_xp(message.guild.id, message.author.id, random.randint(15, 25), time.time())
         if int(data["level"]) > int(before["level"]):
             await message.channel.send(
                 f"🎉 {message.author.mention} **Seviye {data['level']}** seviyesine ulaştınız!")
@@ -36,7 +36,7 @@ class Seviye(commands.Cog):
         if not await require_channel(ctx, "chat_channel"):
             return
         uye = uye or ctx.author
-        data = await self.bot.db.get_level(uye.id)
+        data = await self.bot.db.get_level(ctx.guild.id, uye.id)
         xp, level = int(data["xp"]), int(data["level"])
         target = self.xp_hesapla(level)
         filled = min(10, int(xp / target * 10))

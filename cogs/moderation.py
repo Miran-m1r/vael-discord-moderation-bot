@@ -24,23 +24,15 @@ class Moderation(commands.Cog):
         # AI TETİKLEYİCİLERİ
         self.supheli_kelimeler = ["lan", "mal", "aptal", "salak", "kes", "sus", "ezik", "velet", "sg", "sana ne"]
 
-
-        self.zindan_rol_id = int(os.getenv("ZINDAN_ROL_ID", 0))
-
         api_key = os.getenv("OPEN_AI_API_KEY") or os.getenv("OPENAI_API_KEY")
         self.ai_client = AsyncOpenAI(api_key=api_key) if api_key else None
 
-
-
-        self.trust_scores = {}
         self.clean_messages = {}
         self.nuke_tracker = {}
 
     async def log_channel(self, guild):
         settings = await self.bot.db.get_settings(guild.id)
-        return guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
-
-
+        return guild.get_channel(settings["log_channel"]) if settings and settings.get("log_channel") else None
 
     async def ai_niyet_okuyucu(self, text):
         """AsyncOpenAI ile temiz entegrasyon"""
@@ -66,22 +58,19 @@ class Moderation(commands.Cog):
             return False
 
     async def guven_puani_kes(self, member, miktar, sebep):
-        uid = member.id
-        if uid not in self.trust_scores:
-            self.trust_scores[uid] = 100
-
-        self.trust_scores[uid] -= miktar
-        guncel_puan = self.trust_scores[uid]
+        guncel_puan = await self.bot.db.update_trust_score(member.guild.id, member.id, -miktar)
 
         settings = await self.bot.db.get_settings(member.guild.id)
-        log_kanali = member.guild.get_channel(settings["log_channel"]) if settings and settings["log_channel"] else None
+        log_channel_id = settings.get("log_channel") if settings else None
+        log_kanali = member.guild.get_channel(log_channel_id) if log_channel_id else None
         if log_kanali:
             embed = discord.Embed(title="📉 Sosyal Kredi Düştü!", color=discord.Color.orange())
             embed.description = f"**{member.name}** kişisinin puanı **{guncel_puan}**'a düştü.\n**Sebep:** {sebep}"
             await log_kanali.send(embed=embed)
 
         if guncel_puan <= 10:
-            zindan_rolu = member.guild.get_role(self.zindan_rol_id)
+            zindan_rol_id = settings.get("zindan_role") if settings else None
+            zindan_rolu = member.guild.get_role(zindan_rol_id) if zindan_rol_id else None
             if zindan_rolu:
                 eski_roller = [r for r in member.roles if r.name != "@everyone"]
                 await member.remove_roles(*eski_roller)
@@ -102,11 +91,9 @@ class Moderation(commands.Cog):
             except:
                 pass
 
-
-
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot or message.author.guild_permissions.administrator:
+        if message.author.bot or message.author.guild_permissions.administrator or not message.guild:
             return
 
         icerik = message.content
@@ -129,22 +116,20 @@ class Moderation(commands.Cog):
                                            "AI tarafından pasif-agresif / gizli toksiklik algılandı.")
                 return
 
-        uid = message.author.id
-        if uid not in self.trust_scores:
-            self.trust_scores[uid] = 100
+        tracker_key = (message.guild.id, message.author.id)
+        current_score = await self.bot.db.get_trust_score(message.guild.id, message.author.id)
 
-        if self.trust_scores[uid] < 150:
-            self.clean_messages[uid] = self.clean_messages.get(uid, 0) + 1
-            if self.clean_messages[uid] >= 15:
-                self.trust_scores[uid] = min(100, self.trust_scores[uid] + 5)
-                self.clean_messages[uid] = 0
-
-
+        if current_score < 150:
+            self.clean_messages[tracker_key] = self.clean_messages.get(tracker_key, 0) + 1
+            if self.clean_messages[tracker_key] >= 15:
+                diff = min(100, current_score + 5) - current_score
+                if diff > 0:
+                    await self.bot.db.update_trust_score(message.guild.id, message.author.id, diff)
+                self.clean_messages[tracker_key] = 0
 
     @discord.slash_command(name="kredi", description="Sosyal kredi puanınızı görüntüler.")
     async def kredi(self, ctx: discord.ApplicationContext):
-        uid = ctx.author.id
-        puan = self.trust_scores.get(uid, 100)
+        puan = await self.bot.db.get_trust_score(ctx.guild.id, ctx.author.id)
 
         if puan >= 90:
             durum = "Sosyal kredi puanınız yüksek ve hesabınız iyi durumdadır."
@@ -166,7 +151,7 @@ class Moderation(commands.Cog):
     # ====================================================================
     @commands.Cog.listener()
     async def on_message_delete(self, message):
-        if message.author.bot: return
+        if message.author.bot or not message.guild: return
 
         if message.mentions:
             await message.channel.send(
@@ -175,7 +160,7 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
-        if before.author.bot or before.content == after.content: return
+        if before.author.bot or before.content == after.content or not before.guild: return
 
         log_kanali = await self.log_channel(before.guild)
         if log_kanali:
@@ -272,7 +257,9 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_roles=True)
     async def zindan(self, ctx: discord.ApplicationContext, uye: discord.Member):
         if not await require_channel(ctx, "admin_channel"): return
-        zindan_rolu = ctx.guild.get_role(self.zindan_rol_id)
+        settings = await self.bot.db.get_settings(ctx.guild.id)
+        zindan_rol_id = settings.get("zindan_role") if settings else None
+        zindan_rolu = ctx.guild.get_role(zindan_rol_id) if zindan_rol_id else None
         if not zindan_rolu: return await ctx.respond("Kısıtlama rolü bulunamadı.")
         eski_roller = [r for r in uye.roles if r.name != "@everyone"]
         await uye.remove_roles(*eski_roller)
@@ -286,18 +273,17 @@ class Moderation(commands.Cog):
         await uye.ban(reason=sebep)
         await ctx.respond(f"🔨 **{uye.name}** sunucudan uzaklaştırıldı. Sebep: {sebep}")
 
-
-
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
         log_kanali = await self.log_channel(channel.guild)
         if not log_kanali: return
+        yapan = None
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
             yapan = entry.user
             break
         embed = discord.Embed(title="📁 Yeni Oda Açıldı!", color=discord.Color.green())
         embed.add_field(name="Kanal:", value=channel.name, inline=True)
-        embed.add_field(name="Açan:", value=yapan.name, inline=True)
+        embed.add_field(name="Açan:", value=yapan.name if yapan else "Tespit edilemedi", inline=True)
         await log_kanali.send(embed=embed)
 
     @commands.Cog.listener()
@@ -306,21 +292,27 @@ class Moderation(commands.Cog):
         if not log_kanali: return
 
         if len(before.roles) < len(after.roles):
-            eklenen = next(role for role in after.roles if role not in before.roles)
+            eklenen = next((role for role in after.roles if role not in before.roles), None)
+            if not eklenen: return
+            yapan = None
             async for entry in after.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
                 yapan = entry.user
                 break
+            yapan_name = yapan.name if yapan else "Yetkili"
             await log_kanali.send(embed=discord.Embed(title="🏷️ Rol Verildi",
-                                                      description=f"**{yapan.name}**, **{after.name}** kişisine **{eklenen.name}** rolünü bastı.",
+                                                      description=f"**{yapan_name}**, **{after.name}** kişisine **{eklenen.name}** rolünü bastı.",
                                                       color=discord.Color.blue()))
 
         elif len(before.roles) > len(after.roles):
-            alinan = next(role for role in before.roles if role not in after.roles)
+            alinan = next((role for role in before.roles if role not in after.roles), None)
+            if not alinan: return
+            yapan = None
             async for entry in after.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
                 yapan = entry.user
                 break
+            yapan_name = yapan.name if yapan else "Yetkili"
             await log_kanali.send(embed=discord.Embed(title="📉 Rütbe Söküldü",
-                                                      description=f"**{yapan.name}**, **{after.name}** kişisinin **{alinan.name}** rolünü kesti.",
+                                                      description=f"**{yapan_name}**, **{after.name}** kişisinin **{alinan.name}** rolünü kesti.",
                                                       color=discord.Color.orange()))
 
 

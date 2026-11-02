@@ -54,9 +54,17 @@ async def require_admin_role(context: CommandContext) -> bool:
     if not guild or not isinstance(author, discord.Member):
         return False
 
-    role_id = _configured_role_id()
+    bot = getattr(context, "bot", None) or getattr(context, "client", None)
+    role_id = None
+    if bot and hasattr(bot, "db"):
+        settings = await bot.db.get_settings(guild.id)
+        if settings and settings.get("admin_role"):
+            role_id = settings.get("admin_role")
     if role_id is None:
-        await _send(context, "Yönetim komutları kapalı: `.env` içinde geçerli bir `ADMIN_ROLE_ID` tanımlayın.")
+        role_id = _configured_role_id()
+
+    if role_id is None:
+        await _send(context, "Yönetim komutları kapalı: `/kurulum` ile yönetici rolünü veya `.env` içinde `ADMIN_ROLE_ID` tanımlayın.")
         return False
 
     if author.get_role(role_id) is None:

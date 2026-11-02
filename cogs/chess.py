@@ -66,11 +66,11 @@ class ChessView(discord.ui.View):
         return True
 
     @discord.ui.button(label="Hamle Yap", style=discord.ButtonStyle.primary, emoji="♟️")
-    async def move_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def move_button(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(MoveModal(self))
 
     @discord.ui.button(label="Oyundan Ayrıl", style=discord.ButtonStyle.danger, emoji="🏳️")
-    async def resign_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def resign_button(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         winner = next(player for player in self.game["players"] if player != interaction.user)
         await interaction.response.defer()
         await self.cog.finish_game(self.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
@@ -127,15 +127,16 @@ class ChessInviteView(discord.ui.View):
         return True
 
     @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def accept(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         if self.resolved:
             return
         self.resolved = True
         if self.cog.active_games.get(interaction.channel.id):
             await interaction.response.edit_message(content="Bu kanalda zaten devam eden bir oyun bulunmaktadır.", view=None)
             return
+        guild_id = interaction.guild.id if interaction.guild else self.ctx.guild.id
         if self.bet and (
-            not await self.cog.bot.db.try_withdraw_pair(self.ctx.author.id, self.opponent.id, self.bet)
+            not await self.cog.bot.db.try_withdraw_pair(guild_id, self.ctx.author.id, self.opponent.id, self.bet)
         ):
             await interaction.response.edit_message(content="Oyunculardan birinin bakiyesi bahis için yeterli değildir.", view=None)
             return
@@ -151,7 +152,7 @@ class ChessInviteView(discord.ui.View):
         await self.cog.update_game_message(interaction.channel, ChessView(self.cog, interaction.channel, game))
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
-    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def decline(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         self.resolved = True
         await interaction.response.edit_message(content="Satranç daveti reddedildi.", view=None)
         self.stop()
@@ -184,15 +185,16 @@ class Satranc(commands.Cog):
         game = self.active_games.pop(channel.id, None)
         if not game:
             return
+        guild_id = channel.guild.id
         if winner is None and game["bet"]:
-            await self.bot.db.add_balance(game["players"][0].id, game["bet"])
+            await self.bot.db.add_balance(guild_id, game["players"][0].id, game["bet"])
             if not game["bot_mode"]:
-                await self.bot.db.add_balance(game["players"][1].id, game["bet"])
+                await self.bot.db.add_balance(guild_id, game["players"][1].id, game["bet"])
             result = "Oyun berabere tamamlandı; bahisler iade edildi."
         elif winner is None:
             result = "Oyun berabere tamamlandı."
         elif game["bet"]:
-            await self.bot.db.add_balance(winner.id, game["bet"] * 2)
+            await self.bot.db.add_balance(guild_id, winner.id, game["bet"] * 2)
             result = f"{winner.mention} oyunu kazandı. Toplam ödül: {game['bet'] * 2} kredi."
         else:
             result = f"{winner.mention} oyunu kazandı."
@@ -217,7 +219,7 @@ class Satranc(commands.Cog):
             await ctx.respond("Bahis tutarı sıfır veya daha büyük olmalıdır.")
             return
         if rakip is None:
-            if bahis and not await self.bot.db.try_withdraw(ctx.author.id, bahis):
+            if bahis and not await self.bot.db.try_withdraw(ctx.guild.id, ctx.author.id, bahis):
                 await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
                 return
             game = {
@@ -231,7 +233,7 @@ class Satranc(commands.Cog):
         if rakip == ctx.author or rakip.bot:
             await ctx.respond("Geçerli bir rakip kullanıcı belirtiniz.")
             return
-        if bahis and (await self.bot.db.get_economy(ctx.author.id))["bakiye"] < bahis:
+        if bahis and (await self.bot.db.get_economy(ctx.guild.id, ctx.author.id))["bakiye"] < bahis:
             await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
             return
         embed = discord.Embed(
