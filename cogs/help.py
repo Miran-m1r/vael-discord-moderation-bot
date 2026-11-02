@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 
-from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
 
@@ -11,8 +10,6 @@ class Help(commands.Cog):
 
     @discord.slash_command(name="help", description="Kullanılabilir bot komutlarını listeler.")
     async def help_command(self, ctx: discord.ApplicationContext):
-        if not await require_channel(ctx, "chat_channel"):
-            return
         commands_by_cog = {}
         registered = list(getattr(self.bot, "application_commands", []) or [])
         registered.extend(getattr(self.bot, "pending_application_commands", []) or [])

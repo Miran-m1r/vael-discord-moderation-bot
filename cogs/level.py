@@ -4,7 +4,6 @@ import time
 import discord
 from discord.ext import commands
 
-from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
 
@@ -33,8 +32,6 @@ class Seviye(commands.Cog):
 
     @discord.slash_command(name="seviye", description="Kullanıcının seviye ve XP durumunu görüntüler.")
     async def seviye(self, ctx: discord.ApplicationContext, uye: discord.Member = None):
-        if not await require_channel(ctx, "chat_channel"):
-            return
         uye = uye or ctx.author
         data = await self.bot.db.get_level(ctx.guild.id, uye.id)
         xp, level = int(data["xp"]), int(data["level"])

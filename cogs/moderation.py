@@ -19,7 +19,7 @@ class Moderation(commands.Cog):
 
         # KÜFÜR VE REKLAM FİLTRELERİ (Regex - Anında silinenler)
         self.banned_words_regex = re.compile(r"(oç|orospu|siktir|piç)", re.IGNORECASE)
-        self.ads_regex = re.compile(r"(discord\.gg/|http[s]?://)", re.IGNORECASE)
+        self.ads_regex = re.compile(r"(discord\.gg/|discord\.com/invite/)", re.IGNORECASE)
 
         # AI TETİKLEYİCİLERİ
         self.supheli_kelimeler = ["lan", "mal", "aptal", "salak", "kes", "sus", "ezik", "velet", "sg", "sana ne"]

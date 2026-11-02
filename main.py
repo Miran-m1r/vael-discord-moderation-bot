@@ -44,6 +44,43 @@ class MekanBot(commands.Bot):
         print(">>> YÜKLENEN COG'LAR:", list(self.cogs.keys()))
         print(">>> AKTİF SLASH KOMUTLAR:", [c.name for c in getattr(self, 'application_commands', [])])
 
+    async def on_guild_join(self, guild: discord.Guild):
+        try:
+            owner = guild.owner
+            if owner is None and guild.owner_id:
+                try:
+                    owner = await guild.fetch_member(guild.owner_id)
+                except Exception:
+                    pass
+
+            bot_member = guild.me or (await guild.fetch_member(self.user.id) if self.user else None)
+
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            }
+            if bot_member:
+                overwrites[bot_member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            if owner:
+                overwrites[owner] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            channel = await guild.create_text_channel("mekan-kurulum", overwrites=overwrites)
+
+            embed = discord.Embed(
+                title="⚙️ MekanBot Kurulum Paneli",
+                description=(
+                    f"Hoş geldiniz {owner.mention if owner else 'Sunucu Sahibi'}!\n\n"
+                    "Botun kanallarını (log, oyun, müzik, sohbet vb.) ve yetkili rollerini "
+                    "(mod, admin, zindan) yapılandırmak için lütfen bu kanalda **/kurulum** "
+                    "komutunu çalıştırınız.\n\n"
+                    "Bu kanal yalnızca sunucu sahibine ve bota özeldir. Kurulum tamamlandıktan sonra kanalı silebilirsiniz."
+                ),
+                color=discord.Color.blurple(),
+            )
+            embed.set_footer(text="MekanBot | Otomatik Kurulum Asistanı")
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"on_guild_join sırasında hata oluştu ({guild.name}): {e}")
+
 
 def main():
     load_dotenv()

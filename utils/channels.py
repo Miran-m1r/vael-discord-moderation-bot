@@ -49,8 +49,15 @@ def _configured_role_id() -> int | None:
 
 async def require_admin_role(context: CommandContext) -> bool:
     """Allow management commands only to members with the configured role."""
-    guild = _guild(context)
+    try:
+        owner_id = int(os.getenv("OWNER_ID", 0))
+    except (ValueError, TypeError):
+        owner_id = 0
     author = _author(context)
+    if owner_id and author and author.id == owner_id:
+        return True
+
+    guild = _guild(context)
     if not guild or not isinstance(author, discord.Member):
         return False
 
@@ -85,6 +92,14 @@ def admin_role_only():
 
 async def require_channel(context: CommandContext, setting: str) -> bool:
     """Ensure a command is used in the configured channel."""
+    try:
+        owner_id = int(os.getenv("OWNER_ID", 0))
+    except (ValueError, TypeError):
+        owner_id = 0
+    author = _author(context)
+    if owner_id and author and author.id == owner_id:
+        return True
+
     guild = _guild(context)
     if not guild:
         return False

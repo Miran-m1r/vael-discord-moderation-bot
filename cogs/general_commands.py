@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv, find_dotenv
-from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
 load_dotenv(find_dotenv())
@@ -16,10 +15,6 @@ class Genel(commands.Cog):
     @discord.slash_command(name="feedback", description="Yöneticiye geri bildirim veya öneri iletir.")
     async def feedback(self, ctx: discord.ApplicationContext, mesaj: str):
         """Kullanıcıların şikayet, istek veya önerilerini direkt senin DM kutuna atar"""
-        if not await require_channel(ctx, "chat_channel"):
-            return
-
-        # Komutun kullanıldığı mesajı hemen silelim ki ortalıkta kirlilik olmasın
         # Sahibin ID'sini bulup DM nesnesini oluşturalım
         sahip = await self.bot.fetch_user(self.sahip_id)
         if not sahip:
