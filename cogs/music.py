@@ -10,8 +10,8 @@ from utils.discord_compat import add_cog
 # 1. YOUTUBE VE SES MOTORU AYARLARI (İnce Ayarlar)
 # ====================================================================
 # YouTube'un botları banlamasını engellemek ve yayını optimize etmek için
-yt_dlp_ayarlari = {
-    'format': 'bestaudio/best/ba/b',
+t_dlp_ayarlari = {
+    'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
     'default_search': 'auto',
@@ -19,15 +19,15 @@ yt_dlp_ayarlari = {
     'cookiefile': 'cookies.txt',
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'web', 'tv']
+            'player_client': ['android_music', 'android'],
+            'player_skip': ['webpage', 'configs']
         }
     }
-}
+},
 
 ffmpeg_ayarlari = {
     'options': '-vn',
-    # Şarkının ortasında bağlantı koparsa botun düşmemesi için otomatik yeniden bağlanma
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
 }
 
 ytdl = yt_dlp.YoutubeDL(yt_dlp_ayarlari)
