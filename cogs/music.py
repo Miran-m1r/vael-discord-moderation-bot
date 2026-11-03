@@ -16,7 +16,8 @@ yt_dlp_ayarlari = {
     'quiet': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'extractor_args': {'youtube': {'player_client': ['android']}}
+    'cookiefile': 'cookies.txt',
+    'extractor_args': {'youtube': {'player_client': ['android', 'ios']}}
 }
 
 ffmpeg_ayarlari = {
