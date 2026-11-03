@@ -112,6 +112,7 @@ class Muzik(commands.Cog):
     # ====================================================================
     @discord.slash_command(name="play", description="YouTube üzerinden müzik arar ve oynatır.")
     async def play(self, ctx: discord.ApplicationContext, arama_sorgusu: str):
+        await ctx.defer()
         """Şarkı aratma ve sıraya ekleme komutu"""
         if not await require_channel(ctx, "music_channel"):
             return
