@@ -10,15 +10,14 @@ from utils.discord_compat import add_cog
 # 1. YOUTUBE VE SES MOTORU AYARLARI (İnce Ayarlar)
 # ====================================================================
 yt_dlp_ayarlari = {
-    'format': 'ba/b',
+    'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'cookiefile': 'cookies.txt',
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios', 'mweb']
+            'player_client': ['android', 'web_embedded']
         }
     }
 }
