@@ -1,11 +1,15 @@
 import asyncio
 from dataclasses import dataclass
+import io
+import json
+import os
 import random
 from urllib.parse import quote
 
 import aiohttp
 import discord
 from discord.ext import commands
+from PIL import Image, ImageDraw
 
 from utils.channels import require_channel
 from utils.discord_compat import add_cog
@@ -16,7 +20,7 @@ class CaseDefinition:
     name: str
     price: int
     items: tuple[str, ...]
-    gif_url: str = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Zudmp4dW1qOWE4cnZ4Y2F4dnQyc3IyejJ4cmQ0ZXoxNnZycG1rYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKtnuHOHHUjR38Y/giphy.gif"
+    image_url: str
 
 
 CASES: dict[str, CaseDefinition] = {
@@ -27,6 +31,7 @@ CASES: dict[str, CaseDefinition] = {
             "AK-47 | Head Shot", "M4A1-S | Emphorosaur-S", "AWP | Duality", "P2000 | Wicked Sick",
             "UMP-45 | Wild Child", "Glock-18 | Umbral Rabbit", "MAC-10 | Sakkaku"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frnAVvfb6aqduc_TFVjTCxbx05OU4S3jilE9w4DzRnImtIy2Sa1JzDJEhRPlK7EcO4U8gfA",
     ),
     "clutch": CaseDefinition(
         name="Clutch Case",
@@ -35,6 +40,7 @@ CASES: dict[str, CaseDefinition] = {
             "M4A4 | Neo-Noir", "USP-S | Cortex", "AWP | Mortis", "MP7 | Bloodsport",
             "Nova | Wild Six", "Glock-18 | Moonrise", "MAG-7 | SWAG-7"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frHsVtqr8a_dsdKTAWDWVxLgjsrAwHSvgwEQk4m-ByYuqIC2eO1VyD5QiR_lK7EcxQQPYQA",
     ),
     "gamma": CaseDefinition(
         name="Gamma Case",
@@ -43,6 +49,7 @@ CASES: dict[str, CaseDefinition] = {
             "M4A1-S | Mecha Industries", "Glock-18 | Wasteland Rebel", "M4A4 | Desolate Space", "AWP | Phobos",
             "SCAR-20 | Bloodsport", "P2000 | Imperial Dragon", "R8 Revolver | Reboot"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frHEVtvP5bPZrd6XECmOSxe0v4bRoTnnjwBkitWrRm4yoeX3GagMnCZZ2FPlK7EcEv22BnQ",
     ),
     "bravo": CaseDefinition(
         name="Operation Bravo Case",
@@ -51,6 +58,7 @@ CASES: dict[str, CaseDefinition] = {
             "AK-47 | Fire Serpent", "Desert Eagle | Golden Koi", "AWP | Graphite", "P90 | Emerald Dragon",
             "P2000 | Ocean Foam", "USP-S | Overgrowth", "MAC-10 | Graven"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj7-lz1QAn4kZjf9CsVuvf7OfQ5IabBVzbHlb915bcwHCjikEp_sTnTn4z6eH6RblQlC8RwFPlK7EdXSP0Ibg",
     ),
     "weapon1": CaseDefinition(
         name="CS:GO Weapon Case",
@@ -59,6 +67,7 @@ CASES: dict[str, CaseDefinition] = {
             "AWP | Lightning Strike", "AK-47 | Case Hardened", "Desert Eagle | Hypnotic", "Glock-18 | Dragon Tattoo",
             "USP-S | Dark Water", "M4A1-S | Dark Water", "SG 553 | Ultraviolet"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bji61XxRCKg0MSz_nUDvPb-OPFvdKTFDzbAkbp16bY5Gn6wkx9ysj7Xntf9IC6WZgA-Sswnnj45WXo",
     ),
     "prisma": CaseDefinition(
         name="Prisma Case",
@@ -67,6 +76,7 @@ CASES: dict[str, CaseDefinition] = {
             "M4A4 | The Emperor", "Five-SeveN | Angry Mob", "AWP | Atheris", "AUG | Momentum",
             "XM1014 | Incinegator", "R8 Revolver | Skull Crusher", "Desert Eagle | Light Rail"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_fr3AV6aD8O6BpdKKQVmPEwr1zs-c8Tnngl09w52zTmY2sc3jBag8jXpohE_lK7Ede7E2Kfw",
     ),
     "chroma3": CaseDefinition(
         name="Chroma 3 Case",
@@ -75,6 +85,7 @@ CASES: dict[str, CaseDefinition] = {
             "M4A1-S | Chantico's Fire", "PP-Bizon | Judgement of Anubis", "SSG 08 | Ghost Crusader", "P250 | Asiimov",
             "UMP-45 | Primal Saber", "CZ75-Auto | Red Astor", "Galil AR | Firefight"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frHAVuKf7PaJucPLHW2TExb9z4OdvHirixEomtW7cyduvci2VZ1AiCsR2Q_lK7EdW_VBhrw",
     ),
     "dreams": CaseDefinition(
         name="Dreams & Nightmares Case",
@@ -83,6 +94,7 @@ CASES: dict[str, CaseDefinition] = {
             "AK-47 | Nightwish", "MP9 | Starlight Protector", "Dual Berettas | Melondrama", "FAMAS | Rapid Eye Movement",
             "MP7 | Abyssal Apparition", "USP-S | Ticket to Hell", "M4A1-S | Night Terror"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frnIV7Kb5OaU-JqfHDzXFle0u4LY8Gy_kkRgisGzcm4v4J3vDOAQmDMdyRvlK7EcmeCU3yw",
     ),
     "fracture": CaseDefinition(
         name="Fracture Case",
@@ -91,6 +103,7 @@ CASES: dict[str, CaseDefinition] = {
             "Desert Eagle | Printstream", "AK-47 | Legion of Anubis", "M4A4 | Tooth Fairy", "Glock-18 | Vogue",
             "XM1014 | Entombed", "MAC-10 | Allure", "MAG-7 | Monster Call"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_fr3QV7aD7OP01IfbGDzPCmbsm4LU5GnvkzUsi4WvUmIqtci_CPQNyApsjE_lK7EfrhW545A",
     ),
     "recoil": CaseDefinition(
         name="Recoil Case",
@@ -99,6 +112,7 @@ CASES: dict[str, CaseDefinition] = {
             "USP-S | Printstream", "AK-47 | Ice Coaled", "Sawed-Off | Kiss♥Love", "SG 553 | Dragon Tech",
             "P250 | Visions", "Dual Berettas | Flora Carnivora", "R8 Revolver | Crazy 8"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frnMVu6b-avA-JqSSCjSWwuhz47U9TCzlxh9yt2WGnNqgIi-fbgUkWMNxFPlK7EdIJF6a2Q",
     ),
     "kilowatt": CaseDefinition(
         name="Kilowatt Case",
@@ -107,15 +121,26 @@ CASES: dict[str, CaseDefinition] = {
             "AK-47 | Inheritance", "AWP | Chrome Cannon", "M4A1-S | Black Lotus", "Zeus x27 | Olympus",
             "USP-S | Jawbreaker", "Glock-18 | Block-18", "M4A4 | Etch Lord"
         ),
+        image_url="https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJKz2lu_XsnXwtmkJjSU91dh8bj35VTqVBP4io_frnEVvqf_a6VoIfGSXz7Hlbwg57QwSS_mxhl15jiGyN37c3_GZw91W8BwRflK7EfKsa2sfw",
     ),
 }
 
+# Load skin image mapping from static asset catalog
+SKIN_IMAGES: dict[str, str] = {}
+skins_json_path = os.path.join(os.path.dirname(__file__), "..", "assets", "cases", "skins.json")
+if os.path.exists(skins_json_path):
+    try:
+        with open(skins_json_path, encoding="utf-8") as _f:
+            SKIN_IMAGES = json.load(_f)
+    except Exception:
+        pass
+
 RARITIES = (
-    ("Mil-Spec (Mavi)", 79.92, 1.0, 0x4B69FF),
-    ("Restricted (Mor)", 15.98, 1.8, 0x8847FF),
-    ("Classified (Pembe)", 3.19, 3.5, 0xD32CE6),
-    ("Covert (Kırmızı)", 0.64, 8.0, 0xEB4B4B),
-    ("Rare Special Item (Altın)", 0.26, 20.0, 0xFFD700),
+    ("Mil-Spec (Mavi)", 79.92, 1.0, 0x4B69FF, (75, 105, 255)),
+    ("Restricted (Mor)", 15.98, 1.8, 0x8847FF, (136, 71, 255)),
+    ("Classified (Pembe)", 3.19, 3.5, 0xD32CE6, (211, 44, 230)),
+    ("Covert (Kırmızı)", 0.64, 8.0, 0xEB4B4B, (235, 75, 75)),
+    ("Rare Special Item (Altın)", 0.26, 20.0, 0xFFD700, (255, 215, 0)),
 )
 
 WEAR_NAMES = (
@@ -128,17 +153,16 @@ WEAR_NAMES = (
 
 
 def steam_market_url(item_name: str) -> str:
-    """Steam Market listing URL used as the item's canonical visual source."""
     return f"https://steamcommunity.com/market/listings/730/{quote(item_name, safe='')}"
 
 
 async def resolve_steam_image_url(listing_url: str) -> str | None:
     try:
-        timeout = aiohttp.ClientTimeout(total=8)
+        timeout = aiohttp.ClientTimeout(total=5)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(
                 listing_url,
-                headers={"User-Agent": "MekanBot/2.0 (Discord CS2 Inventory)"},
+                headers={"User-Agent": "Mozilla/5.0 (MekanBot/2.0)"},
             ) as response:
                 if response.status != 200:
                     return None
@@ -150,20 +174,133 @@ async def resolve_steam_image_url(listing_url: str) -> str | None:
         start += len(marker)
         end = html.find('"', start)
         return html[start:end] if end > start else None
-    except (aiohttp.ClientError, asyncio.TimeoutError):
+    except Exception:
         return None
 
 
-def create_drop(case: CaseDefinition) -> tuple[str, str, str, float, int, str, int]:
-    rarity, _, multiplier, color_code = random.choices(
-        RARITIES, weights=[item[1] for item in RARITIES], k=1
-    )[0]
+def create_drop(case: CaseDefinition) -> tuple[str, str, str, float, int, str, int, tuple[int, int, int], str]:
+    rarity_entry = random.choices(RARITIES, weights=[item[1] for item in RARITIES], k=1)[0]
+    rarity, _, multiplier, color_code, rgb_color = rarity_entry
     float_value = round(random.uniform(0.0, 1.0), 4)
     wear = next(name for upper_bound, name in WEAR_NAMES if float_value < upper_bound)
-    base_name = random.choice(case.items)
+
+    if rarity == "Rare Special Item (Altın)":
+        base_name = random.choice(["★ Karambit | Doppler", "★ Butterfly Knife | Fade", "★ M9 Bayonet | Lore"])
+    else:
+        base_name = random.choice(case.items)
+
     item_name = f"{base_name} ({wear})"
+    image_url = SKIN_IMAGES.get(base_name) or ""
     price = max(1, int(case.price * multiplier * (1.15 - min(float_value, 1.0) * 0.6)))
-    return item_name, wear, rarity, float_value, price, steam_market_url(base_name), color_code
+    return item_name, wear, rarity, float_value, price, steam_market_url(base_name), color_code, rgb_color, image_url
+
+
+def render_roulette_gif(case_items: tuple[str, ...], winning_name: str, winning_rgb: tuple[int, int, int]) -> discord.File:
+    """Renders a dynamic CS2 case opening roulette GIF that decelerates and stops at the winning item."""
+    W, H = 640, 160
+    card_w = 110
+    card_h = 130
+    y_card = (H - card_h) // 2
+
+    # Build horizontal roulette strip
+    strip: list[tuple[str, tuple[int, int, int]]] = []
+    for _ in range(18):
+        rand_item = random.choice(case_items)
+        rand_rarity = random.choice(RARITIES[:3])
+        strip.append((rand_item, rand_rarity[4]))
+    strip.append((winning_name, winning_rgb))
+    for _ in range(6):
+        rand_item = random.choice(case_items)
+        rand_rarity = random.choice(RARITIES[:4])
+        strip.append((rand_item, rand_rarity[4]))
+
+    target_idx = 18
+    target_center_x = target_idx * card_w + card_w // 2
+    total_dist = target_center_x - (W // 2)
+
+    frames = []
+    n_frames = 17
+    durations = []
+
+    for i in range(n_frames):
+        # Ease-out cubic deceleration curve
+        progress = 1.0 - (1.0 - (i / (n_frames - 1))) ** 3
+        curr_offset = progress * total_dist
+
+        im = Image.new("RGB", (W, H), (20, 22, 28))
+        draw = ImageDraw.Draw(im)
+
+        for idx, (name, color) in enumerate(strip):
+            cx = idx * card_w - curr_offset
+            if -card_w <= cx <= W:
+                draw.rectangle([cx + 3, y_card, cx + card_w - 3, y_card + card_h], fill=(32, 35, 44), outline=color, width=2)
+                draw.rectangle([cx + 3, y_card + card_h - 8, cx + card_w - 3, y_card + card_h], fill=color)
+                clean_n = name.split("|")[-1].strip() if "|" in name else name
+                draw.text((cx + 8, y_card + 35), clean_n[:12], fill=(240, 240, 240))
+
+        # Center gold needle marker
+        draw.polygon([(W // 2 - 8, 2), (W // 2 + 8, 2), (W // 2, 16)], fill=(255, 215, 0))
+        draw.polygon([(W // 2 - 8, H - 2), (W // 2 + 8, H - 2), (W // 2, H - 16)], fill=(255, 215, 0))
+        draw.line([(W // 2, 16), (W // 2, H - 16)], fill=(255, 215, 0), width=2)
+
+        dur = 120 if i < n_frames - 2 else 600
+        durations.append(dur)
+        frames.append(im.quantize(colors=64))
+
+    buf = io.BytesIO()
+    frames[0].save(buf, format="GIF", save_all=True, append_images=frames[1:], duration=durations, loop=1)
+    buf.seek(0)
+    return discord.File(buf, filename="roulette.gif")
+
+
+class CaseSelect(discord.ui.Select):
+    def __init__(self, cog: "Cases"):
+        options = [
+            discord.SelectOption(
+                label=case.name,
+                value=key,
+                description=f"{case.price} Kredi",
+                emoji="📦",
+            )
+            for key, case in CASES.items()
+        ]
+        super().__init__(
+            placeholder="🔎 İncelemek istediğiniz kasayı seçiniz...",
+            options=options,
+            row=0,
+        )
+        self.cog = cog
+
+    async def callback(self, interaction: discord.Interaction):
+        key = self.values[0]
+        case = CASES[key]
+        embed = discord.Embed(
+            title=f"📦 {case.name}",
+            description=(
+                f"💸 **Fiyat:** `{case.price} Kredi`\n"
+                f"🛒 **Açmak için:** `/buycase {key}`\n\n"
+                f"🔫 **Bu Kasadan Çıkabilecek Skinler:**\n"
+                + "\n".join(f"• {item}" for item in case.items)
+                + "\n• ★ Nadir Özel Bıçak / Eldiven (Altın)"
+            ),
+            color=discord.Color.gold(),
+        )
+        embed.set_thumbnail(url=case.image_url)
+        embed.set_image(url=case.image_url)
+        embed.set_footer(text="Kasayı açmak için: /buycase " + key)
+        await interaction.response.edit_message(embed=embed, view=CaseCatalogView(self.cog, selected=key))
+
+
+class CaseCatalogView(discord.ui.View):
+    def __init__(self, cog: "Cases", selected: str | None = None):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.selected = selected
+        select = CaseSelect(cog)
+        if selected:
+            for opt in select.options:
+                opt.default = (opt.value == selected)
+        self.add_item(select)
 
 
 class TradeView(discord.ui.View):
@@ -222,7 +359,7 @@ class InventoryView(discord.ui.View):
             embed.description = "Envanterinizde henüz eşya bulunmamaktadır.\n`/buycase` ile kasa açabilirsiniz!"
         else:
             for item in items:
-                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item['image_url'] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
+                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item["image_url"] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
                 embed.add_field(
                     name=f"🆔 ID: {item['id']} | 🔫 {item['item_name']}",
                     value=f"✨ **{item['rarity']}** | 🎯 Float: `{item['float_value']:.4f}` | 💰 **{item['price']} Kredi**\n{img_link}",
@@ -252,7 +389,7 @@ class Cases(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @discord.slash_command(name="cases", description="Satın alınabilir CS2 kasalarını ve içeriklerini listeler.")
+    @discord.slash_command(name="cases", description="Satın alınabilir CS2 kasalarını ve görsel mağazasını listeler.")
     async def cases(self, ctx: discord.ApplicationContext):
         if not await require_channel(ctx, "game_channel"):
             return
@@ -260,23 +397,35 @@ class Cases(commands.Cog):
         embed = discord.Embed(
             title="📦 CS2 Kasa Mağazası",
             description=(
-                "İstediğiniz kasayı açmak için: `/buycase <kasa_adi>`\n"
-                "Örnek: `/buycase revolution` veya `/buycase bravo`\n"
+                "Açmak istediğiniz kasayı seçmek için aşağıdaki menüyü kullanabilir veya\n"
+                "`/buycase <kasa_adi>` yazabilirsiniz (örn: `/buycase revolution`).\n"
                 "───────────────────────────────"
             ),
             color=discord.Color.gold(),
         )
-        embed.set_thumbnail(url="https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif")
+
+        catalog_path = os.path.join(os.path.dirname(__file__), "..", "assets", "cases", "catalog.png")
+        file = None
+        if os.path.exists(catalog_path):
+            file = discord.File(catalog_path, filename="cases_catalog.png")
+            embed.set_image(url="attachment://cases_catalog.png")
+        else:
+            embed.set_thumbnail(url=CASES["revolution"].image_url)
 
         for key, case in CASES.items():
-            sample_skins = ", ".join(case.items[:3]) + "..."
+            sample_skins = ", ".join(case.items[:2]) + "..."
             embed.add_field(
                 name=f"🛒 {case.name} (`{key}`)",
-                value=f"💸 **Fiyat:** `{case.price} Kredi`\n🔫 **Örnek Skinler:** *{sample_skins}*",
+                value=f"💸 **Fiyat:** `{case.price} Kredi` | [🖼️ Kasa Görseli]({case.image_url})\n🔫 *{sample_skins}*",
                 inline=False,
             )
-        embed.set_footer(text="Kasaları açtığınızda nadir özel bıçak ve eldiven düşürme şansınız da vardır!")
-        await ctx.respond(embed=embed)
+
+        embed.set_footer(text="Kasaları incelemek için aşağıdaki seçim menüsünü kullanabilirsiniz.")
+        view = CaseCatalogView(self)
+        if file:
+            await ctx.respond(embed=embed, file=file, view=view)
+        else:
+            await ctx.respond(embed=embed, view=view)
 
     @discord.slash_command(name="buycase", description="CS2 kasası satın alır ve animasyonlu olarak açar.")
     async def buycase(
@@ -305,23 +454,29 @@ class Cases(commands.Cog):
                 await ctx.respond("❌ Bakiyeniz bu kasayı satın almak için yeterli değildir.", ephemeral=True)
                 return
 
-            # Animated roulette suspense GIF
+            item_name, wear, rarity, float_value, price, market_url, rarity_color, rgb_color, image_url = create_drop(case)
+
+            # Generate dynamic CS2 roulette animation GIF
+            gif_file = render_roulette_gif(case.items, item_name, rgb_color)
             opening = discord.Embed(
-                title="🎁 Kasa Açılıyor...",
+                title=f"🎁 {case.name} Açılıyor...",
                 description=(
                     f"🎰 **{case.name}** açılıyor...\n"
-                    f"*Rulet dönüyor, şansınız belirleniyor! Lütfen bekleyiniz...*"
+                    f"*Rulet dönüyor, itemler geçiyor... Şansınız belirleniyor!*"
                 ),
                 color=discord.Color.gold(),
             )
-            opening.set_image(url=case.gif_url)
-            await ctx.respond(embed=opening)
+            opening.set_thumbnail(url=case.image_url)
+            opening.set_image(url="attachment://roulette.gif")
+            await ctx.respond(embed=opening, file=gif_file)
 
-            # Suspense animation delay
+            # Roulette suspense delay
             await asyncio.sleep(3.2)
 
-            item_name, wear, rarity, float_value, price, market_url, rarity_color = create_drop(case)
-            image_url = await resolve_steam_image_url(market_url)
+            # Fallback to scraping if skin image was not in verified catalog
+            if not image_url:
+                image_url = await resolve_steam_image_url(market_url) or case.image_url
+
             item_id = await self.bot.db.add_inventory_item(
                 ctx.guild.id, ctx.author.id, item_name, rarity, float_value, price, image_url
             )
@@ -338,11 +493,10 @@ class Cases(commands.Cog):
             result.add_field(name="🆔 Eşya ID", value=f"`#{item_id}`", inline=True)
             result.add_field(name="🔗 Steam Pazarı", value=f"[Pazar Fiyatı]({market_url})", inline=True)
 
-            # High quality showcase image
+            # Showcase: Thumbnail is the 3D Case, main image is the authentic dropped Skin!
+            result.set_thumbnail(url=case.image_url)
             if image_url:
                 result.set_image(url=image_url)
-            else:
-                result.set_thumbnail(url="https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif")
 
             result.set_footer(
                 text=f"Eşyayı satmak için: /sell {item_id} | Takaslamak için: /trade @kullanici {item_id}"
@@ -366,8 +520,7 @@ class Cases(commands.Cog):
             embed.description = "Envanterinizde henüz eşya bulunmamaktadır.\n`/buycase` komutu ile kasa açabilirsiniz!"
         else:
             for item in items:
-                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item[
-                    'image_url'] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
+                img_link = f"[🖼️ Resmi Gör]({item['image_url']})" if item["image_url"] else f"[🔗 Steam Market]({steam_market_url(item['item_name'].split(' (')[0])})"
                 embed.add_field(
                     name=f"🆔 ID: {item['id']} | 🔫 {item['item_name']}",
                     value=f"✨ **{item['rarity']}** | 🎯 Float: `{item['float_value']:.4f}` | 💰 **{item['price']} Kredi**\n{img_link}",
