@@ -5,3 +5,5 @@ python-dotenv>=1.0
 openai>=1.0
 yt-dlp>=2024.1
 chess>=1.10
+cairosvg>=2.7
+pillow>=10.0

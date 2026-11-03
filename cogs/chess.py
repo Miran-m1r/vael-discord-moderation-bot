@@ -1,47 +1,97 @@
 from __future__ import annotations
 
+import asyncio
+import io
+import os
 import random
 from typing import Any
 
+# Ensure Homebrew and standard library paths are available for Cairo on macOS/Linux
+for _p in ("/opt/homebrew/lib", "/usr/local/lib", "/usr/lib"):
+    if os.path.exists(_p) and _p not in os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", ""):
+        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = _p + ":" + os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+
+import cairosvg
 import chess
+import chess.svg
 import discord
 from discord.ext import commands
 
 from utils.channels import require_channel
 from utils.discord_compat import add_cog
 
+PIECE_NAMES_TR = {
+    chess.PAWN: "Piyon",
+    chess.KNIGHT: "At",
+    chess.BISHOP: "Fil",
+    chess.ROOK: "Kale",
+    chess.QUEEN: "Vezir",
+    chess.KING: "Şah",
+}
 
-PIECES = {
-    "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
-    "p": "♟", "n": "♞", "b": "♝", "r": "♜", "q": "♛", "k": "♚",
+PIECE_SYMBOLS = {
+    (chess.PAWN, chess.WHITE): "♙",
+    (chess.KNIGHT, chess.WHITE): "♘",
+    (chess.BISHOP, chess.WHITE): "♗",
+    (chess.ROOK, chess.WHITE): "♖",
+    (chess.QUEEN, chess.WHITE): "♕",
+    (chess.KING, chess.WHITE): "♔",
+    (chess.PAWN, chess.BLACK): "♟",
+    (chess.KNIGHT, chess.BLACK): "♞",
+    (chess.BISHOP, chess.BLACK): "♝",
+    (chess.ROOK, chess.BLACK): "♜",
+    (chess.QUEEN, chess.BLACK): "♛",
+    (chess.KING, chess.BLACK): "♚",
 }
 
 
-def render_board(board: chess.Board) -> str:
-    rows = []
-    for rank in range(7, -1, -1):
-        cells = []
-        for file in range(8):
-            piece = board.piece_at(chess.square(file, rank))
-            cells.append(PIECES[piece.symbol()] if piece else ("▫️" if (file + rank) % 2 else "▪️"))
-        rows.append(f"{rank + 1} " + " ".join(cells))
-    return "```\n" + "\n".join(rows) + "\n  a b c d e f g h\n```"
+def render_board_file(board: chess.Board) -> discord.File:
+    lastmove = board.peek() if board.move_stack else None
+    check = board.king(board.turn) if board.is_check() else None
+    svg_data = chess.svg.board(
+        board=board,
+        lastmove=lastmove,
+        check=check,
+        size=520,
+        colors={
+            "square light": "#f0d9b5",
+            "square dark": "#b58863",
+            "margin": "#262421",
+            "coord": "#c4a482",
+        },
+    )
+    png_bytes = cairosvg.svg2png(bytestring=svg_data.encode("utf-8"))
+    return discord.File(io.BytesIO(png_bytes), filename="board.png")
 
 
-class MoveModal(discord.ui.Modal):
-    def __init__(self, view: "ChessView"):
-        super().__init__(title="Hamle Girişi")
-        self.view = view
-        self.move = discord.ui.InputText(
-            label="Hamle",
-            placeholder="Örneğin: e4, Nf3 veya e2e4",
-            min_length=2,
-            max_length=10,
+class PieceSelect(discord.ui.Select):
+    def __init__(self, chess_view: "ChessView", options: list[discord.SelectOption]):
+        super().__init__(
+            placeholder="♟️ Oynamak istediğiniz taşı seçin...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            row=0,
         )
-        self.add_item(self.move)
+        self.chess_view = chess_view
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.view.play_move(interaction, str(self.move.value))
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.chess_view.on_piece_selected(interaction, int(self.values[0]))
+
+
+class DestinationSelect(discord.ui.Select):
+    def __init__(self, chess_view: "ChessView", options: list[discord.SelectOption]):
+        super().__init__(
+            placeholder="🎯 Hedef kareyi seçin...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            row=1,
+        )
+        self.chess_view = chess_view
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.chess_view.on_destination_selected(interaction, int(self.values[0]))
 
 
 class ChessView(discord.ui.View):
@@ -50,64 +100,210 @@ class ChessView(discord.ui.View):
         self.cog = cog
         self.channel = channel
         self.game = game
-        self.lock = __import__("asyncio").Lock()
+        self.lock = asyncio.Lock()
         self.finished = False
+        self.selected_from_square: int | None = None
+        self.rebuild_components()
+
+    def rebuild_components(self) -> None:
+        self.clear_items()
+        if self.finished:
+            return
+
+        board: chess.Board = self.game["board"]
+        legal_froms = sorted(list({move.from_square for move in board.legal_moves}))
+        if not legal_froms:
+            return
+
+        piece_options: list[discord.SelectOption] = []
+        for sq in legal_froms:
+            piece = board.piece_at(sq)
+            if not piece:
+                continue
+            sq_name = chess.square_name(sq)
+            piece_name = PIECE_NAMES_TR.get(piece.piece_type, "Taş")
+            symbol = PIECE_SYMBOLS.get((piece.piece_type, piece.color), "♟")
+            is_default = (sq == self.selected_from_square)
+            piece_options.append(
+                discord.SelectOption(
+                    label=f"{symbol} {piece_name} ({sq_name})",
+                    value=str(sq),
+                    default=is_default,
+                    description=f"{sq_name.upper()} karesindeki {piece_name}",
+                )
+            )
+
+        if piece_options:
+            self.add_item(PieceSelect(self, piece_options[:25]))
+
+        if self.selected_from_square is not None:
+            dest_moves = [m for m in board.legal_moves if m.from_square == self.selected_from_square]
+            dest_options: list[discord.SelectOption] = []
+            for m in dest_moves:
+                to_sq = m.to_square
+                to_name = chess.square_name(to_sq)
+                is_capture = board.is_capture(m)
+                is_check = board.gives_check(m)
+                emoji = "⚔️" if is_capture else "🎯"
+                desc_parts = []
+                if is_capture:
+                    desc_parts.append("Taş Alma")
+                if is_check:
+                    desc_parts.append("Şah!")
+                if m.promotion:
+                    desc_parts.append("Vezir Terfisi")
+                desc = ", ".join(desc_parts) if desc_parts else "Güvenli Hamle"
+                dest_options.append(
+                    discord.SelectOption(
+                        label=f"{to_name.upper()} ({to_name})",
+                        value=str(to_sq),
+                        emoji=emoji,
+                        description=desc[:50],
+                    )
+                )
+
+            if dest_options:
+                self.add_item(DestinationSelect(self, dest_options[:25]))
+
+            cancel_btn = discord.ui.Button(
+                label="Seçimi İptal Et",
+                style=discord.ButtonStyle.secondary,
+                emoji="✖️",
+                row=2,
+            )
+            cancel_btn.callback = self.on_cancel_selected
+            self.add_item(cancel_btn)
+
+        resign_btn = discord.ui.Button(
+            label="Oyundan Ayrıl",
+            style=discord.ButtonStyle.danger,
+            emoji="🏳️",
+            row=2,
+        )
+        resign_btn.callback = self.on_resign_clicked
+        self.add_item(resign_btn)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user not in self.game["players"]:
             await interaction.response.send_message(
-                "Bu satranç oyunu yalnızca oyunun oyuncuları tarafından kullanılabilir.",
+                "Bu satranç oyunu yalnızca oyundaki oyuncular tarafından kontrol edilebilir.",
                 ephemeral=True,
             )
             return False
+
+        # Allow resign button click even if not your turn
+        custom_id = getattr(interaction.data, "get", lambda _: "")("custom_id")
         if interaction.user != self.game["turn"]:
+            # Check if this interaction is resign
+            if interaction.data and interaction.data.get("component_type") == 2:
+                # Button click
+                return True
             await interaction.response.send_message("Şu anda hamle sırası sizde değildir.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Hamle Yap", style=discord.ButtonStyle.primary, emoji="♟️")
-    async def move_button(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(MoveModal(self))
-
-    @discord.ui.button(label="Oyundan Ayrıl", style=discord.ButtonStyle.danger, emoji="🏳️")
-    async def resign_button(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
-        winner = next(player for player in self.game["players"] if player != interaction.user)
-        await interaction.response.defer()
-        await self.cog.finish_game(self.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
-
-    async def play_move(self, interaction: discord.Interaction, notation: str) -> None:
-        bot_turn = False
+    async def on_piece_selected(self, interaction: discord.Interaction, from_sq: int) -> None:
         async with self.lock:
             if self.finished:
-                await interaction.response.send_message("Bu oyun zaten sona ermiştir.", ephemeral=True)
+                await interaction.response.send_message("Bu oyun sona ermiştir.", ephemeral=True)
                 return
+            self.selected_from_square = from_sq
+            self.rebuild_components()
+            await interaction.response.edit_message(view=self)
+
+    async def on_cancel_selected(self, interaction: discord.Interaction) -> None:
+        async with self.lock:
+            if self.finished:
+                return
+            self.selected_from_square = None
+            self.rebuild_components()
+            await interaction.response.edit_message(view=self)
+
+    async def on_resign_clicked(self, interaction: discord.Interaction) -> None:
+        if interaction.user not in self.game["players"]:
+            await interaction.response.send_message("Bu oyunun oyuncusu değilsiniz.", ephemeral=True)
+            return
+        winner = next(p for p in self.game["players"] if p != interaction.user)
+        self.finished = True
+        self.clear_items()
+        await interaction.response.defer()
+        await self.cog.finish_game(self.channel, winner, f"{interaction.user.display_name} oyundan çekildi.")
+
+    async def on_destination_selected(self, interaction: discord.Interaction, to_sq: int) -> None:
+        async with self.lock:
+            if self.finished or self.selected_from_square is None:
+                await interaction.response.send_message("Lütfen tekrar bir taş seçiniz.", ephemeral=True)
+                return
+
             board: chess.Board = self.game["board"]
-            try:
-                move = chess.Move.from_uci(notation.strip())
-                if move not in board.legal_moves:
-                    move = board.parse_san(notation.strip())
-            except (ValueError, chess.InvalidMoveError):
-                await interaction.response.send_message(
-                    "Geçersiz bir hamle girdiniz. SAN veya UCI formatında yasal bir hamle belirtiniz.",
-                    ephemeral=True,
-                )
+            move = chess.Move(self.selected_from_square, to_sq)
+            if chess.Move(self.selected_from_square, to_sq, promotion=chess.QUEEN) in board.legal_moves:
+                move = chess.Move(self.selected_from_square, to_sq, promotion=chess.QUEEN)
+
+            if move not in board.legal_moves:
+                await interaction.response.send_message("Geçersiz hamle! Lütfen tekrar deneyiniz.", ephemeral=True)
                 return
+
+            san_str = board.san(move)
             board.push(move)
-            self.game["turn"] = self.game["players"][1] if self.game["turn"] == self.game["players"][0] else self.game["players"][0]
-            await interaction.response.defer()
+            self.game["last_move_text"] = f"{interaction.user.display_name}: {san_str}"
+            self.selected_from_square = None
+
+            # Switch turn
+            self.game["turn"] = (
+                self.game["players"][1]
+                if self.game["turn"] == self.game["players"][0]
+                else self.game["players"][0]
+            )
+
+            # Check game termination
             if board.is_game_over():
-                winner = None if board.outcome().winner is None else (
-                    self.game["players"][0] if board.outcome().winner == chess.WHITE else self.game["players"][1]
-                )
-                await self.cog.finish_game(self.channel, winner, "Oyun kurallara göre sona erdi.")
+                self.finished = True
+                self.clear_items()
+                outcome = board.outcome()
+                winner = None
+                if outcome and outcome.winner is not None:
+                    winner = (
+                        self.game["players"][0]
+                        if outcome.winner == chess.WHITE
+                        else self.game["players"][1]
+                    )
+                await interaction.response.defer()
+                await self.cog.finish_game(self.channel, winner, "Oyun kurallara göre tamamlandı.")
                 return
-            await self.cog.update_game_message(self.channel, self)
-            bot_turn = self.game.get("bot_mode") and self.game["turn"] == self.cog.bot.user
-        if bot_turn:
-            await self.cog.bot_move(self)
+
+            # Bot mode logic
+            if self.game.get("bot_mode") and self.game["turn"] == self.cog.bot.user:
+                bot_moves = list(board.legal_moves)
+                if bot_moves:
+                    bot_move = random.choice(bot_moves)
+                    bot_san = board.san(bot_move)
+                    board.push(bot_move)
+                    self.game["last_move_text"] = f"Bot: {bot_san}"
+                    self.game["turn"] = self.game["players"][0]
+                    if board.is_game_over():
+                        self.finished = True
+                        self.clear_items()
+                        outcome = board.outcome()
+                        winner = None
+                        if outcome and outcome.winner is not None:
+                            winner = (
+                                self.game["players"][0]
+                                if outcome.winner == chess.WHITE
+                                else self.game["players"][1]
+                            )
+                        await interaction.response.defer()
+                        await self.cog.finish_game(self.channel, winner, "Bot hamlesi sonrası oyun bitti.")
+                        return
+
+            self.rebuild_components()
+            file = render_board_file(board)
+            embed = self.cog.build_game_embed(self.game)
+            await interaction.response.edit_message(embed=embed, file=file, view=self)
 
     async def on_timeout(self) -> None:
         if not self.finished:
+            self.finished = True
             await self.cog.finish_game(self.channel, None, "Oyun zaman aşımı nedeniyle sona erdi.")
 
 
@@ -126,32 +322,45 @@ class ChessInviteView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success, emoji="✅")
     async def accept(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         if self.resolved:
             return
         self.resolved = True
         if self.cog.active_games.get(interaction.channel.id):
-            await interaction.response.edit_message(content="Bu kanalda zaten devam eden bir oyun bulunmaktadır.", view=None)
+            await interaction.response.edit_message(
+                content="Bu kanalda zaten devam eden bir satranç oyunu bulunmaktadır.", view=None
+            )
             return
+
         guild_id = interaction.guild.id if interaction.guild else self.ctx.guild.id
         if self.bet and (
-            not await self.cog.bot.db.try_withdraw_pair(guild_id, self.ctx.author.id, self.opponent.id, self.bet)
+            not await self.cog.bot.db.try_withdraw_pair(
+                guild_id, self.ctx.author.id, self.opponent.id, self.bet
+            )
         ):
-            await interaction.response.edit_message(content="Oyunculardan birinin bakiyesi bahis için yeterli değildir.", view=None)
+            await interaction.response.edit_message(
+                content="Oyunculardan birinin bakiyesi belirtilen bahis için yeterli değildir.", view=None
+            )
             return
+
         game = {
             "board": chess.Board(),
             "players": [self.ctx.author, self.opponent],
             "turn": self.ctx.author,
             "bet": self.bet,
             "bot_mode": False,
+            "last_move_text": "Oyun başladı",
         }
         self.cog.active_games[interaction.channel.id] = game
-        await interaction.response.edit_message(content="Satranç oyunu başlatıldı.", view=None)
-        await self.cog.update_game_message(interaction.channel, ChessView(self.cog, interaction.channel, game))
+        await interaction.response.edit_message(content="🎮 Satranç maçı başlatıldı!", view=None)
 
-    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
+        view = ChessView(self.cog, interaction.channel, game)
+        file = render_board_file(game["board"])
+        embed = self.cog.build_game_embed(game)
+        await interaction.channel.send(embed=embed, file=file, view=view)
+
+    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline(self, button: discord.ui.Button, interaction: discord.Interaction) -> None:
         self.resolved = True
         await interaction.response.edit_message(content="Satranç daveti reddedildi.", view=None)
@@ -163,23 +372,40 @@ class Satranc(commands.Cog):
         self.bot = bot
         self.active_games: dict[int, dict[str, Any]] = {}
 
-    async def update_game_message(self, channel, view: ChessView) -> None:
-        game = view.game
-        description = render_board(game["board"])
-        description += f"\nSıra: {game['turn'].mention if hasattr(game['turn'], 'mention') else 'Bot'}"
-        await channel.send(embed=discord.Embed(title="Satranç Oyunu", description=description), view=view)
+    def build_game_embed(self, game: dict[str, Any]) -> discord.Embed:
+        board: chess.Board = game["board"]
+        p1 = game["players"][0]
+        p2 = game["players"][1]
+        p2_mention = p2.mention if hasattr(p2, "mention") else "🤖 MekanBot"
 
-    async def bot_move(self, view: ChessView) -> None:
-        async with view.lock:
-            if view.finished:
-                return
-            board: chess.Board = view.game["board"]
-            legal_moves = list(board.legal_moves)
-            if not legal_moves:
-                return
-            board.push(random.choice(legal_moves))
-            view.game["turn"] = view.game["players"][0]
-            await self.update_game_message(view.channel, view)
+        turn_user = game["turn"]
+        turn_str = turn_user.mention if hasattr(turn_user, "mention") else "🤖 MekanBot"
+
+        if board.is_checkmate():
+            status_text = "💥 **ŞAH-MAT!** Oyun tamamlandı."
+            color = discord.Color.red()
+        elif board.is_check():
+            status_text = "⚠️ **DİKKAT: ŞAH ÇEKİLDİ!**"
+            color = discord.Color.orange()
+        elif board.is_stalemate() or board.is_insufficient_material():
+            status_text = "🤝 **PAT / YETERSİZ MATERYAL (Berabere)**"
+            color = discord.Color.greyple()
+        else:
+            status_text = "🟢 **Oyun Devam Ediyor**"
+            color = discord.Color.gold() if game["bet"] > 0 else discord.Color.blurple()
+
+        embed = discord.Embed(title="♟️ Satranç Karşılaşması", color=color)
+        embed.description = (
+            f"⚪ **Beyaz:** {p1.mention}\n"
+            f"⚫ **Siyah:** {p2_mention}\n"
+            f"💰 **Bahis:** `{game['bet']} Kredi`\n"
+            f"🎯 **Sıra:** {turn_str}\n"
+            f"📌 **Durum:** {status_text}\n"
+            f"📝 **Son Hamle:** `{game.get('last_move_text', 'Başlangıç')}`"
+        )
+        embed.set_image(url="attachment://board.png")
+        embed.set_footer(text="Aşağıdaki menülerden önce taşınızı, ardından hedef kareyi seçiniz.")
+        return embed
 
     async def finish_game(self, channel, winner, reason: str) -> None:
         game = self.active_games.pop(channel.id, None)
@@ -190,15 +416,23 @@ class Satranc(commands.Cog):
             await self.bot.db.add_balance(guild_id, game["players"][0].id, game["bet"])
             if not game["bot_mode"]:
                 await self.bot.db.add_balance(guild_id, game["players"][1].id, game["bet"])
-            result = "Oyun berabere tamamlandı; bahisler iade edildi."
+            result = "Oyun berabere tamamlandı; bahis tutarları iade edildi."
         elif winner is None:
             result = "Oyun berabere tamamlandı."
         elif game["bet"]:
             await self.bot.db.add_balance(guild_id, winner.id, game["bet"] * 2)
-            result = f"{winner.mention} oyunu kazandı. Toplam ödül: {game['bet'] * 2} kredi."
+            result = f"{winner.mention} oyunu kazandı! Ödül: **{game['bet'] * 2} kredi**."
         else:
-            result = f"{winner.mention} oyunu kazandı."
-        await channel.send(f"**Satranç sonucu:** {result}\n**Açıklama:** {reason}")
+            result = f"{winner.mention} oyunu kazandı!"
+
+        file = render_board_file(game["board"])
+        embed = discord.Embed(
+            title="🏁 Satranç Karşılaşması Sona Erdi",
+            description=f"**Sonuç:** {result}\n**Detay:** {reason}",
+            color=discord.Color.green() if winner else discord.Color.greyple(),
+        )
+        embed.set_image(url="attachment://board.png")
+        await channel.send(embed=embed, file=file)
 
     @discord.slash_command(
         name="chess",
@@ -218,27 +452,42 @@ class Satranc(commands.Cog):
         if bahis < 0:
             await ctx.respond("Bahis tutarı sıfır veya daha büyük olmalıdır.")
             return
+
         if rakip is None:
             if bahis and not await self.bot.db.try_withdraw(ctx.guild.id, ctx.author.id, bahis):
                 await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
                 return
             game = {
-                "board": chess.Board(), "players": [ctx.author, self.bot.user],
-                "turn": ctx.author, "bet": bahis, "bot_mode": True,
+                "board": chess.Board(),
+                "players": [ctx.author, self.bot.user],
+                "turn": ctx.author,
+                "bet": bahis,
+                "bot_mode": True,
+                "last_move_text": "Bota karşı oyun başlatıldı",
             }
             self.active_games[ctx.channel.id] = game
-            await ctx.respond("Bota karşı satranç oyunu başlatıldı.")
-            await self.update_game_message(ctx.channel, ChessView(self, ctx.channel, game))
+            file = render_board_file(game["board"])
+            embed = self.build_game_embed(game)
+            view = ChessView(self, ctx.channel, game)
+            await ctx.respond("Bota karşı satranç karşılaşması oluşturuldu.")
+            await ctx.channel.send(embed=embed, file=file, view=view)
             return
+
         if rakip == ctx.author or rakip.bot:
             await ctx.respond("Geçerli bir rakip kullanıcı belirtiniz.")
             return
         if bahis and (await self.bot.db.get_economy(ctx.guild.id, ctx.author.id))["bakiye"] < bahis:
             await ctx.respond("Bakiyeniz belirtilen bahis için yeterli değildir.")
             return
+
         embed = discord.Embed(
-            title="Satranç Daveti",
-            description=f"{ctx.author.mention}, {rakip.mention} kullanıcısını {bahis} kredi bahisli bir oyuna davet etti.",
+            title="♟️ Satranç Düellosu Daveti",
+            description=(
+                f"{ctx.author.mention}, {rakip.mention} kullanıcısını satranç oynamaya davet etti!\n\n"
+                f"💰 **Bahis:** `{bahis} Kredi`\n"
+                f"Daveti kabul etmek için 2 dakikanız bulunmaktadır."
+            ),
+            color=discord.Color.gold() if bahis > 0 else discord.Color.blurple(),
         )
         await ctx.respond(content=rakip.mention, embed=embed, view=ChessInviteView(self, ctx, rakip, bahis))
 
@@ -252,7 +501,7 @@ class Satranc(commands.Cog):
             await ctx.respond("Bu oyunun oyuncusu değilsiniz.")
             return
         winner = next(player for player in game["players"] if player != ctx.author)
-        await self.finish_game(ctx.channel, winner, "Oyunculardan biri oyundan ayrıldı.")
+        await self.finish_game(ctx.channel, winner, f"{ctx.author.display_name} `/pes` komutu ile oyundan ayrıldı.")
 
 
 def setup(bot):
