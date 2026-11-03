@@ -15,7 +15,8 @@ yt_dlp_ayarlari = {
     'noplaylist': True,
     'quiet': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0'  # IPv6 hatalarını önler
+    'source_address': '0.0.0.0',
+    'extractor_args': {'youtube': {'player_client': ['android']}}
 }
 
 ffmpeg_ayarlari = {
