@@ -11,13 +11,17 @@ from utils.discord_compat import add_cog
 # ====================================================================
 # YouTube'un botları banlamasını engellemek ve yayını optimize etmek için
 yt_dlp_ayarlari = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio/best/ba/b',
     'noplaylist': True,
     'quiet': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'cookiefile': 'cookies.txt',
-    'extractor_args': {'youtube': {'player_client': ['tv', 'web']}}
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['mweb', 'web', 'tv']
+        }
+    }
 }
 
 ffmpeg_ayarlari = {
