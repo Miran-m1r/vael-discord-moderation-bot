@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 def add_cog(bot, cog) -> None:
     result = bot.add_cog(cog)
     return result
