@@ -10,7 +10,7 @@ from utils.discord_compat import add_cog
 # 1. YOUTUBE VE SES MOTORU AYARLARI (İnce Ayarlar)
 # ====================================================================
 # YouTube'un botları banlamasını engellemek ve yayını optimize etmek için
-t_dlp_ayarlari = {
+yt_dlp_ayarlari = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
